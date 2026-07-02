@@ -1,0 +1,27 @@
+# Shared PVC for all Model Selection suite scenario results.
+#
+# One PVC per suite (not per scenario) — every scenario Job in this suite
+# mounts this same claim and writes to its own OUTPUT_DIR subpath
+# (e.g. /artifacts/conversational-chat, /artifacts/rag-long-context), so
+# results accumulate side by side instead of needing a separate PVC each.
+#
+# Apply once per namespace before running any scenario Job:
+#   kubectl apply -f model-selection/k8s/results-pvc.yaml -n <namespace>
+#
+# Required edit before applying:
+#   - storageClassName: set to a StorageClass that exists on the target
+#     cluster (omit the field entirely to use the cluster default)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: aiperf-model-selection-results
+  labels:
+    app.kubernetes.io/part-of: genai-load-performance-testing
+    app.kubernetes.io/component: model-selection
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: ""   # TODO: set to a StorageClass on the target cluster, or remove this line to use the default
+  resources:
+    requests:
+      storage: 20Gi      # shared across all scenarios in this suite; grow if running many sweeps before retrieval

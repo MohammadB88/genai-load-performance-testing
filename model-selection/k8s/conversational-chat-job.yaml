@@ -1,0 +1,113 @@
+# Model Selection suite — "Conversational Chat" scenario, run as a K8s Job.
+#
+# The script itself (model-selection/run_conversational_chat.sh) is the
+# source of truth for the aiperf invocation — this manifest just mounts it
+# into the NGC AIPerf image and supplies config via env vars, since the pod
+# has no TTY for the script's interactive prompts.
+#
+# This suite shares ONE PersistentVolumeClaim across all model-selection
+# scenario Jobs (see results-pvc.yaml) — each scenario writes to its own
+# OUTPUT_DIR subpath on that shared claim rather than getting its own PVC.
+#
+# Usage:
+#   kubectl apply -f model-selection/k8s/results-pvc.yaml -n <namespace>   # once per namespace
+#   kubectl create configmap aiperf-conversational-chat-script \
+#     --from-file=run_conversational_chat.sh=model-selection/run_conversational_chat.sh \
+#     -n <namespace>
+#   kubectl apply -f model-selection/k8s/conversational-chat-job.yaml -n <namespace>
+#
+# Retrieve results after completion:
+#   kubectl cp <namespace>/<pod-name>:/artifacts/conversational-chat ./results/conversational-chat/
+#   (or read directly from the PVC if reused by a later Job/pod)
+#
+# Required edits before applying:
+#   - image: pin to the exact NGC AIPerf tag you're using
+#   - env.MODEL / env.URL: set to the target model and endpoint
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: aiperf-conversational-chat
+  labels:
+    app.kubernetes.io/part-of: genai-load-performance-testing
+    app.kubernetes.io/component: model-selection
+    scenario: conversational-chat
+spec:
+  backoffLimit: 0            # benchmark runs are not safe to blindly retry; investigate failures instead
+  activeDeadlineSeconds: 3600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/part-of: genai-load-performance-testing
+        app.kubernetes.io/component: model-selection
+        scenario: conversational-chat
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: aiperf
+          image: nvcr.io/nvidia/aiperf:<TAG>   # TODO: pin to the exact NGC AIPerf image tag
+          command: ["/bin/bash", "/scripts/run_conversational_chat.sh"]
+          env:
+            # ---- Required: target model/endpoint --------------------------
+            - name: MODEL
+              value: "<model-name>"                        # TODO: e.g. meta/llama-3.1-8b-instruct
+            - name: URL
+              value: "<http://host:port>"                  # TODO: in-cluster Service DNS or external URL
+            - name: ENDPOINT_TYPE
+              value: "chat"
+            - name: ENDPOINT_PATH
+              value: "/v1/chat/completions"
+
+            # ---- Scenario parameters (Conversational Chat, V1 baseline) ---
+            # See docs/scenarios/model-selection.md — keep in sync if changed.
+            - name: CONCURRENCY
+              value: "1"                                   # baseline; sweep: 1/5/10/25
+            - name: CONVERSATION_NUM
+              value: "20"
+            - name: CONVERSATION_TURN_MEAN
+              value: "4"
+            - name: CONVERSATION_TURN_STDDEV
+              value: "1"
+            - name: CONVERSATION_TURN_DELAY_MEAN_MS
+              value: "3500"
+            - name: CONVERSATION_TURN_DELAY_STDDEV_MS
+              value: "750"
+            - name: SYNTHETIC_INPUT_TOKENS_MEAN
+              value: "150"
+            - name: OUTPUT_TOKENS_MEAN
+              value: "200"
+            - name: OUTPUT_TOKENS_STDDEV
+              value: "50"
+            - name: WARMUP_REQUESTS
+              value: "10"
+            - name: RANDOM_SEED
+              value: "42"
+
+            # ---- Non-interactive requirements ------------------------------
+            # Must be set (even if empty) so the script's `read -p` prompts
+            # are skipped — there is no TTY/stdin in a pod.
+            - name: TOKENIZER_PATH
+              value: ""                                    # set to a mounted path to avoid HF Hub calls, else leave empty
+            - name: OUTPUT_DIR
+              value: "/artifacts/conversational-chat"       # subpath on the shared suite PVC — keep unique per scenario
+          volumeMounts:
+            - name: script
+              mountPath: /scripts
+              readOnly: true
+            - name: artifacts
+              mountPath: /artifacts
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "2"
+              memory: "2Gi"
+      volumes:
+        - name: script
+          configMap:
+            name: aiperf-conversational-chat-script
+            defaultMode: 0755
+        - name: artifacts
+          persistentVolumeClaim:
+            claimName: aiperf-model-selection-results   # shared across all model-selection scenarios, see results-pvc.yaml
