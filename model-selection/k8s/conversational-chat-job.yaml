@@ -84,6 +84,16 @@ spec:
             # are skipped — there is no TTY/stdin in a pod.
             - name: TOKENIZER_PATH
               value: "ibm-granite/granite-3.3-8b-instruct"
+            - name: TOKENIZER_TRUST_REMOTE_CODE
+              value: "0"
+            - name: HF_HOME
+              value: "/tmp/hf-home"
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: aiperf-hf-token                     # TODO: remove this env entry if TOKENIZER_PATH is not a gated/private HF repo
+                  key: HF_TOKEN
+                  optional: true
             - name: INPUT_FILE
               value: "/prompts/conversational_chat.jsonl"
             - name: OUTPUT_DIR

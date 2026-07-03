@@ -89,7 +89,7 @@ spec:
             - name: TOKENIZER_TRUST_REMOTE_CODE
               value: "0"
             - name: HF_HOME
-              value: ""
+              value: "/tmp/hf-home"
             - name: HF_TOKEN
               valueFrom:
                 secretKeyRef:
