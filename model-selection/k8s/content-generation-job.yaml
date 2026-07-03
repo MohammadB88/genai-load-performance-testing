@@ -1,6 +1,6 @@
 # Model Selection suite — "Content Generation" scenario, run as a K8s Job.
 #
-# The script itself (model-selection/run_content_generation.sh) is the
+# The script itself (model-selection/scripts/run_content_generation.sh) is the
 # source of truth for the aiperf invocation — this manifest just mounts it
 # (plus its sample prompts file) into the NGC AIPerf image and supplies
 # config via env vars, since the pod has no TTY for the script's
@@ -13,7 +13,7 @@
 # Usage:
 #   kubectl apply -f model-selection/k8s/results-pvc.yaml -n <namespace>   # once per namespace
 #   kubectl create configmap aiperf-content-generation-script \
-#     --from-file=run_content_generation.sh=model-selection/run_content_generation.sh \
+#     --from-file=run_content_generation.sh=model-selection/scripts/run_content_generation.sh \
 #     -n <namespace>
 #   kubectl create configmap aiperf-content-generation-prompts \
 #     --from-file=content_generation.jsonl=model-selection/prompts/content_generation.jsonl \

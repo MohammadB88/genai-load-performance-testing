@@ -22,12 +22,15 @@
 #   ./generate-configmaps.sh -n <namespace> -s rag-long-context -s content-generation
 #   ./generate-configmaps.sh -n <namespace> -s all
 #   NAMESPACE=my-namespace SCENARIOS="rag-long-context content-generation" ./generate-configmaps.sh
+#   ./generate-configmaps.sh                                      # prompts for namespace; blank -> "aiperf"
 #
 set -euo pipefail
 
 OC="${OC_BIN:-oc}"
+DEFAULT_NAMESPACE="aiperf"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MODEL_SELECTION_DIR="$(dirname "$SCRIPT_DIR")"
+SCENARIOS_SCRIPTS_DIR="$MODEL_SELECTION_DIR/scripts"
 
 # All known scenarios: name | script file | prompts file
 ALL_SCENARIOS=(
@@ -57,14 +60,17 @@ while getopts "n:s:h" opt; do
 done
 
 if [ -z "$NAMESPACE" ]; then
-    read -r -p "OpenShift namespace/project: " NAMESPACE
+    read -r -p "OpenShift namespace/project [default: $DEFAULT_NAMESPACE]: " NAMESPACE
 fi
-if [ -z "$NAMESPACE" ]; then
-    echo "Error: namespace must be set (-n <namespace> or NAMESPACE env var)." >&2
-    exit 1
-fi
+NAMESPACE="${NAMESPACE:-$DEFAULT_NAMESPACE}"
 
 NS_ARGS=(-n "$NAMESPACE")
+
+# ---- Ensure the namespace/project exists ------------------------------------
+if ! "$OC" get namespace "$NAMESPACE" >/dev/null 2>&1; then
+    echo "Namespace '$NAMESPACE' not found — creating it."
+    "$OC" new-project "$NAMESPACE" >/dev/null 2>&1 || "$OC" create namespace "$NAMESPACE"
+fi
 
 # ---- Pick which scenarios to generate configmaps for ------------------------
 SCENARIOS=()
@@ -122,7 +128,7 @@ echo "----------------------------------------"
 for entry in "${SCENARIOS[@]}"; do
     IFS='|' read -r scenario script_file prompts_file <<< "$entry"
 
-    script_path="$MODEL_SELECTION_DIR/$script_file"
+    script_path="$SCENARIOS_SCRIPTS_DIR/$script_file"
     prompts_path="$MODEL_SELECTION_DIR/prompts/$prompts_file"
 
     if [ ! -f "$script_path" ]; then

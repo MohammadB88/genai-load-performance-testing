@@ -1,6 +1,6 @@
 # Model Selection suite — "RAG / Long-Context Q&A" scenario, run as a K8s Job.
 #
-# The script itself (model-selection/run_rag_long_context.sh) is the
+# The script itself (model-selection/scripts/run_rag_long_context.sh) is the
 # source of truth for the aiperf invocation — this manifest just mounts it
 # (plus its sample prompts file) into the NGC AIPerf image and supplies
 # config via env vars, since the pod has no TTY for the script's
@@ -13,7 +13,7 @@
 # Usage:
 #   kubectl apply -f model-selection/k8s/results-pvc.yaml -n <namespace>   # once per namespace
 #   kubectl create configmap aiperf-rag-long-context-script \
-#     --from-file=run_rag_long_context.sh=model-selection/run_rag_long_context.sh \
+#     --from-file=run_rag_long_context.sh=model-selection/scripts/run_rag_long_context.sh \
 #     -n <namespace>
 #   kubectl create configmap aiperf-rag-long-context-prompts \
 #     --from-file=rag_long_context.jsonl=model-selection/prompts/rag_long_context.jsonl \

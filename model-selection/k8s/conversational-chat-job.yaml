@@ -1,6 +1,6 @@
 # Model Selection suite — "Conversational Chat" scenario, run as a K8s Job.
 #
-# The script itself (model-selection/run_conversational_chat.sh) is the
+# The script itself (model-selection/scripts/run_conversational_chat.sh) is the
 # source of truth for the aiperf invocation — this manifest just mounts it
 # (plus its sample prompts file) into the NGC AIPerf image and supplies
 # config via env vars, since the pod has no TTY for the script's
@@ -13,7 +13,7 @@
 # Usage:
 #   kubectl apply -f model-selection/k8s/results-pvc.yaml -n <namespace>   # once per namespace
 #   kubectl create configmap aiperf-conversational-chat-script \
-#     --from-file=run_conversational_chat.sh=model-selection/run_conversational_chat.sh \
+#     --from-file=run_conversational_chat.sh=model-selection/scripts/run_conversational_chat.sh \
 #     -n <namespace>
 #   kubectl create configmap aiperf-conversational-chat-prompts \
 #     --from-file=conversational_chat.jsonl=model-selection/prompts/conversational_chat.jsonl \
