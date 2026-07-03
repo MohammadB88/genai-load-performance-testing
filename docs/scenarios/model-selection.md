@@ -21,19 +21,17 @@
 
 ## Think-time implementation
 
-Uses AIPerf's native `--conversation-turn-delay-mean` / `--conversation-turn-delay-stddev` (ms), alongside `--conversation-num`, `--conversation-turn-mean`/`--conversation-turn-stddev`.
+Uses AIPerf's native `--conversation-turn-delay-mean` / `--conversation-turn-delay-stddev` (ms). Turn count and per-turn text come from the input file (see Prompt source below) rather than `--conversation-num`/`--conversation-turn-mean`/`--conversation-turn-stddev`, which only apply when AIPerf is generating conversations synthetically.
 
 ```
 aiperf profile \
   --model <model> \
   --endpoint-type chat \
   --streaming \
-  --conversation-num <N> \
-  --conversation-turn-mean 4 \
-  --conversation-turn-stddev 1 \
+  --input-file model-selection/prompts/conversational_chat.jsonl \
+  --custom-dataset-type multi_turn \
   --conversation-turn-delay-mean 3500 \
   --conversation-turn-delay-stddev 750 \
-  --synthetic-input-tokens-mean 150 \
   --output-tokens-mean 200 \
   --concurrency 1
 ```
@@ -42,5 +40,6 @@ Mean 3500ms / stddev 750ms centers on 3.5s with most draws landing in the 2–5s
 
 ## Prompt source
 
-- V0/V1: synthetic prompts only.
-- V2: customer-provided real prompts, slotted into the same ISL/OSL/turn structure defined above (synthetic = template).
+- **Conversational Chat**: real sample prompts (`model-selection/prompts/conversational_chat.jsonl`), not synthetic token noise. 20 multi-turn sessions (`--custom-dataset-type multi_turn`), 3–5 turns each, everyday-assistant topics. ISL is therefore whatever these prompts tokenize to (targeting ~150 tokens/turn) rather than a fixed synthetic value.
+- Other V0/V1 scenarios: synthetic prompts only, generated via AIPerf's `--synthetic-input-tokens-mean`.
+- V2: customer-provided real prompts replace synthetic/sample prompts across all scenarios, slotted into the same ISL/OSL/turn structure defined above (current prompts act as the template).

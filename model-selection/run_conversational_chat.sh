@@ -6,10 +6,13 @@
 # See docs/scenarios/model-selection.md for the full scenario matrix and
 # docs/metrics/model-selection.md for what to read off the resulting export.
 #
-# Workload shape (V1 baseline, synthetic prompts):
-#   - ISL: 150 new tokens/turn
+# Workload shape (V1 baseline, real sample prompts):
+#   - Prompts: model-selection/prompts/conversational_chat.jsonl — real
+#     multi-turn conversations (--custom-dataset-type multi_turn), NOT
+#     synthetic token noise. ISL is therefore whatever these prompts
+#     tokenize to (targeting ~150 tokens/turn) rather than a fixed value.
 #   - OSL: 200 tokens (stddev 50)
-#   - Turns: 4 ± 1 per conversation
+#   - Turns: 3-5 per conversation (mean ~4), fixed by the prompt file itself
 #   - Think-time between turns: 2-5s human read/type time
 #     (--conversation-turn-delay-mean/stddev, NOT the short tool-round-trip
 #     delay used by the Agentic scenario)
@@ -28,15 +31,13 @@
 set -euo pipefail
 
 # ---- Config (override via env vars if you like) ----------------------------
+INPUT_FILE="${INPUT_FILE:-$(dirname "$0")/prompts/conversational_chat.jsonl}"
+CUSTOM_DATASET_TYPE="${CUSTOM_DATASET_TYPE:-multi_turn}"
 ENDPOINT_TYPE="${ENDPOINT_TYPE:-chat}"
 ENDPOINT_PATH="${ENDPOINT_PATH:-/v1/chat/completions}"
 CONCURRENCY="${CONCURRENCY:-1}"                          # baseline; sweep: 1/5/10/25
-CONVERSATION_NUM="${CONVERSATION_NUM:-20}"
-CONVERSATION_TURN_MEAN="${CONVERSATION_TURN_MEAN:-4}"
-CONVERSATION_TURN_STDDEV="${CONVERSATION_TURN_STDDEV:-1}"
 CONVERSATION_TURN_DELAY_MEAN_MS="${CONVERSATION_TURN_DELAY_MEAN_MS:-3500}"     # 2-5s human think time
 CONVERSATION_TURN_DELAY_STDDEV_MS="${CONVERSATION_TURN_DELAY_STDDEV_MS:-750}"
-SYNTHETIC_INPUT_TOKENS_MEAN="${SYNTHETIC_INPUT_TOKENS_MEAN:-150}"             # per-turn new tokens
 OUTPUT_TOKENS_MEAN="${OUTPUT_TOKENS_MEAN:-200}"
 OUTPUT_TOKENS_STDDEV="${OUTPUT_TOKENS_STDDEV:-50}"
 WARMUP_REQUESTS="${WARMUP_REQUESTS:-10}"
@@ -84,16 +85,20 @@ if [ -z "$MODEL" ] || [ -z "$URL" ]; then
     exit 1
 fi
 
+if [ ! -f "$INPUT_FILE" ]; then
+    echo "Error: input file '$INPUT_FILE' not found." >&2
+    echo "Set INPUT_FILE=/path/to/conversational_chat.jsonl to override." >&2
+    exit 1
+fi
+
 echo "----------------------------------------"
 echo "Scenario:     Conversational Chat (Model Selection)"
 echo "Model:        $MODEL"
 echo "URL:          $URL"
 echo "Endpoint:     $ENDPOINT_TYPE $ENDPOINT_PATH"
+echo "Input file:   $INPUT_FILE ($CUSTOM_DATASET_TYPE)"
 echo "Concurrency:  $CONCURRENCY"
-echo "Conversations:$CONVERSATION_NUM"
-echo "Turns/conv:   ${CONVERSATION_TURN_MEAN} ± ${CONVERSATION_TURN_STDDEV}"
 echo "Think-time:   ${CONVERSATION_TURN_DELAY_MEAN_MS}ms ± ${CONVERSATION_TURN_DELAY_STDDEV_MS}ms"
-echo "ISL:          ${SYNTHETIC_INPUT_TOKENS_MEAN} tokens/turn"
 echo "OSL:          ${OUTPUT_TOKENS_MEAN} tokens (stddev ${OUTPUT_TOKENS_STDDEV})"
 if [ -n "${TOKENIZER_PATH:-}" ]; then
     echo "Tokenizer:    $TOKENIZER_PATH (local, HF Hub disabled)"
@@ -109,12 +114,10 @@ aiperf profile \
     --endpoint-type "$ENDPOINT_TYPE" \
     --endpoint "$ENDPOINT_PATH" \
     --streaming \
-    --conversation-num "$CONVERSATION_NUM" \
-    --conversation-turn-mean "$CONVERSATION_TURN_MEAN" \
-    --conversation-turn-stddev "$CONVERSATION_TURN_STDDEV" \
+    --input-file "$INPUT_FILE" \
+    --custom-dataset-type "$CUSTOM_DATASET_TYPE" \
     --conversation-turn-delay-mean "$CONVERSATION_TURN_DELAY_MEAN_MS" \
     --conversation-turn-delay-stddev "$CONVERSATION_TURN_DELAY_STDDEV_MS" \
-    --synthetic-input-tokens-mean "$SYNTHETIC_INPUT_TOKENS_MEAN" \
     --output-tokens-mean "$OUTPUT_TOKENS_MEAN" \
     --output-tokens-stddev "$OUTPUT_TOKENS_STDDEV" \
     --concurrency "$CONCURRENCY" \

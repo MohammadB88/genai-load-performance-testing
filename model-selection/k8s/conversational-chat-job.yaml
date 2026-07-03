@@ -2,8 +2,9 @@
 #
 # The script itself (model-selection/run_conversational_chat.sh) is the
 # source of truth for the aiperf invocation — this manifest just mounts it
-# into the NGC AIPerf image and supplies config via env vars, since the pod
-# has no TTY for the script's interactive prompts.
+# (plus its sample prompts file) into the NGC AIPerf image and supplies
+# config via env vars, since the pod has no TTY for the script's
+# interactive prompts.
 #
 # This suite shares ONE PersistentVolumeClaim across all model-selection
 # scenario Jobs (see results-pvc.yaml) — each scenario writes to its own
@@ -13,6 +14,9 @@
 #   kubectl apply -f model-selection/k8s/results-pvc.yaml -n <namespace>   # once per namespace
 #   kubectl create configmap aiperf-conversational-chat-script \
 #     --from-file=run_conversational_chat.sh=model-selection/run_conversational_chat.sh \
+#     -n <namespace>
+#   kubectl create configmap aiperf-conversational-chat-prompts \
+#     --from-file=conversational_chat.jsonl=model-selection/prompts/conversational_chat.jsonl \
 #     -n <namespace>
 #   kubectl apply -f model-selection/k8s/conversational-chat-job.yaml -n <namespace>
 #
@@ -62,18 +66,10 @@ spec:
             # See docs/scenarios/model-selection.md — keep in sync if changed.
             - name: CONCURRENCY
               value: "1"                                   # baseline; sweep: 1/5/10/25
-            - name: CONVERSATION_NUM
-              value: "20"
-            - name: CONVERSATION_TURN_MEAN
-              value: "4"
-            - name: CONVERSATION_TURN_STDDEV
-              value: "1"
             - name: CONVERSATION_TURN_DELAY_MEAN_MS
               value: "3500"
             - name: CONVERSATION_TURN_DELAY_STDDEV_MS
               value: "750"
-            - name: SYNTHETIC_INPUT_TOKENS_MEAN
-              value: "150"
             - name: OUTPUT_TOKENS_MEAN
               value: "200"
             - name: OUTPUT_TOKENS_STDDEV
@@ -88,11 +84,16 @@ spec:
             # are skipped — there is no TTY/stdin in a pod.
             - name: TOKENIZER_PATH
               value: ""                                    # set to a mounted path to avoid HF Hub calls, else leave empty
+            - name: INPUT_FILE
+              value: "/prompts/conversational_chat.jsonl"
             - name: OUTPUT_DIR
               value: "/artifacts/conversational-chat"       # subpath on the shared suite PVC — keep unique per scenario
           volumeMounts:
             - name: script
               mountPath: /scripts
+              readOnly: true
+            - name: prompts
+              mountPath: /prompts
               readOnly: true
             - name: artifacts
               mountPath: /artifacts
@@ -108,6 +109,9 @@ spec:
           configMap:
             name: aiperf-conversational-chat-script
             defaultMode: 0755
+        - name: prompts
+          configMap:
+            name: aiperf-conversational-chat-prompts
         - name: artifacts
           persistentVolumeClaim:
             claimName: aiperf-model-selection-results   # shared across all model-selection scenarios, see results-pvc.yaml
