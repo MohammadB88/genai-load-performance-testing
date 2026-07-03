@@ -1,6 +1,6 @@
-# Model Selection suite — "Conversational Chat" scenario, run as a K8s Job.
+# Model Selection suite — "RAG / Long-Context Q&A" scenario, run as a K8s Job.
 #
-# The script itself (model-selection/run_conversational_chat.sh) is the
+# The script itself (model-selection/run_rag_long_context.sh) is the
 # source of truth for the aiperf invocation — this manifest just mounts it
 # (plus its sample prompts file) into the NGC AIPerf image and supplies
 # config via env vars, since the pod has no TTY for the script's
@@ -12,16 +12,16 @@
 #
 # Usage:
 #   kubectl apply -f model-selection/k8s/results-pvc.yaml -n <namespace>   # once per namespace
-#   kubectl create configmap aiperf-conversational-chat-script \
-#     --from-file=run_conversational_chat.sh=model-selection/run_conversational_chat.sh \
+#   kubectl create configmap aiperf-rag-long-context-script \
+#     --from-file=run_rag_long_context.sh=model-selection/run_rag_long_context.sh \
 #     -n <namespace>
-#   kubectl create configmap aiperf-conversational-chat-prompts \
-#     --from-file=conversational_chat.jsonl=model-selection/prompts/conversational_chat.jsonl \
+#   kubectl create configmap aiperf-rag-long-context-prompts \
+#     --from-file=rag_long_context.jsonl=model-selection/prompts/rag_long_context.jsonl \
 #     -n <namespace>
-#   kubectl apply -f model-selection/k8s/conversational-chat-job.yaml -n <namespace>
+#   kubectl apply -f model-selection/k8s/rag-long-context-job.yaml -n <namespace>
 #
 # Retrieve results after completion:
-#   kubectl cp <namespace>/<pod-name>:/artifacts/conversational-chat ./results/conversational-chat/
+#   kubectl cp <namespace>/<pod-name>:/artifacts/rag-long-context ./results/rag-long-context/
 #   (or read directly from the PVC if reused by a later Job/pod)
 #
 # Required edits before applying:
@@ -31,11 +31,11 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: aiperf-conversational-chat
+  name: aiperf-rag-long-context
   labels:
     app.kubernetes.io/part-of: genai-load-performance-testing
     app.kubernetes.io/component: model-selection
-    scenario: conversational-chat
+    scenario: rag-long-context
 spec:
   backoffLimit: 0            # benchmark runs are not safe to blindly retry; investigate failures instead
   activeDeadlineSeconds: 3600
@@ -44,13 +44,13 @@ spec:
       labels:
         app.kubernetes.io/part-of: genai-load-performance-testing
         app.kubernetes.io/component: model-selection
-        scenario: conversational-chat
+        scenario: rag-long-context
     spec:
       restartPolicy: Never
       containers:
         - name: aiperf
           image: nvcr.io/nvidia/ai-dynamo/aiperf:0.10.0   # TODO: pin to the exact NGC AIPerf image tag
-          command: ["/bin/bash", "/scripts/run_conversational_chat.sh"]
+          command: ["/bin/bash", "/scripts/run_rag_long_context.sh"]
           env:
             # ---- Required: target model/endpoint --------------------------
             - name: MODEL
@@ -62,18 +62,12 @@ spec:
             - name: ENDPOINT_PATH
               value: "/v1/chat/completions"
 
-            # ---- Scenario parameters (Conversational Chat, V1 baseline) ---
+            # ---- Scenario parameters (RAG / Long-Context Q&A, V1 baseline) -
             # See docs/scenarios/model-selection.md — keep in sync if changed.
             - name: CONCURRENCY
               value: "1"                                   # baseline; sweep: 1/5/10/25
-            - name: CONVERSATION_TURN_DELAY_MEAN_MS
-              value: "3500"
-            - name: CONVERSATION_TURN_DELAY_STDDEV_MS
-              value: "750"
             - name: OUTPUT_TOKENS_MEAN
-              value: "200"
-            - name: OUTPUT_TOKENS_STDDEV
-              value: "50"
+              value: "250"
             - name: WARMUP_REQUESTS
               value: "10"
             - name: RANDOM_SEED
@@ -85,9 +79,9 @@ spec:
             - name: TOKENIZER_PATH
               value: ""                                    # set to a mounted path to avoid HF Hub calls, else leave empty
             - name: INPUT_FILE
-              value: "/prompts/conversational_chat.jsonl"
+              value: "/prompts/rag_long_context.jsonl"
             - name: OUTPUT_DIR
-              value: "/artifacts/conversational-chat"       # subpath on the shared suite PVC — keep unique per scenario
+              value: "/artifacts/rag-long-context"          # subpath on the shared suite PVC — keep unique per scenario
           volumeMounts:
             - name: script
               mountPath: /scripts
@@ -107,11 +101,11 @@ spec:
       volumes:
         - name: script
           configMap:
-            name: aiperf-conversational-chat-script
+            name: aiperf-rag-long-context-script
             defaultMode: 0755
         - name: prompts
           configMap:
-            name: aiperf-conversational-chat-prompts
+            name: aiperf-rag-long-context-prompts
         - name: artifacts
           persistentVolumeClaim:
             claimName: aiperf-model-selection-results   # shared across all model-selection scenarios, see results-pvc.yaml
