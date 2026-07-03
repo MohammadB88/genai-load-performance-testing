@@ -54,22 +54,21 @@ if [ -z "${URL:-}" ]; then
 fi
 
 # ---- Get TOKENIZER_PATH: env var, else prompt (optional) -------------------
-# If set, AIPerf loads the tokenizer directly from local files and makes
-# no calls to HuggingFace Hub.
+# Accepts either a local directory (offline tokenizer files) or a HuggingFace
+# repo id (e.g. ibm-granite/granite-3.1-8b-instruct) — useful when --model
+# doesn't uniquely resolve to one tokenizer on the Hub.
 if [ -z "${TOKENIZER_PATH:-}" ]; then
-    read -r -p "Path to local tokenizer (leave empty to use HF, model name as tokenizer): " TOKENIZER_PATH
+    read -r -p "Tokenizer: local dir or HF repo id (leave empty to use --model as tokenizer name): " TOKENIZER_PATH
 fi
 
 TOKENIZER_ARGS=()
 if [ -n "${TOKENIZER_PATH:-}" ]; then
-    if [ ! -d "$TOKENIZER_PATH" ]; then
-        echo "Error: tokenizer path '$TOKENIZER_PATH' does not exist or is not a directory." >&2
-        exit 1
+    if [ -d "$TOKENIZER_PATH" ]; then
+        # Local directory: force offline mode so transformers never attempts
+        # to reach huggingface.co, even if the local files are incomplete.
+        export HF_HUB_OFFLINE=1
+        export TRANSFORMERS_OFFLINE=1
     fi
-    # Force offline mode so transformers never attempts to reach huggingface.co,
-    # even if the local files are somehow incomplete.
-    export HF_HUB_OFFLINE=1
-    export TRANSFORMERS_OFFLINE=1
     TOKENIZER_ARGS=(--tokenizer "$TOKENIZER_PATH")
 fi
 

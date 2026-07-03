@@ -83,7 +83,7 @@ spec:
             # Must be set (even if empty) so the script's `read -p` prompts
             # are skipped — there is no TTY/stdin in a pod.
             - name: TOKENIZER_PATH
-              value: ""                                    # set to a mounted path to avoid HF Hub calls, else leave empty
+              value: ""                                    # local mounted dir, or a HF repo id (e.g. ibm-granite/granite-3.1-8b-instruct) if --model doesn't resolve uniquely on the Hub; leave empty to use MODEL as-is
             - name: INPUT_FILE
               value: "/prompts/conversational_chat.jsonl"
             - name: OUTPUT_DIR
