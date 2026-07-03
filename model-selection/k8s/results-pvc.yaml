@@ -21,7 +21,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: ""   # TODO: set to a StorageClass on the target cluster, or remove this line to use the default
+  storageClassName: "ocs-storagecluster-ceph-rbd"   # TODO: set to a StorageClass on the target cluster, or remove this line to use the default
   resources:
     requests:
       storage: 20Gi      # shared across all scenarios in this suite; grow if running many sweeps before retrieval

@@ -54,9 +54,9 @@ spec:
           env:
             # ---- Required: target model/endpoint --------------------------
             - name: MODEL
-              value: "<model-name>"                        # TODO: e.g. meta/llama-3.1-8b-instruct
+              value: "granite-3-1-8b-instruct"
             - name: URL
-              value: "<http://host:port>"                  # TODO: in-cluster Service DNS or external URL
+              value: "http://granite-3-1-8b-instruct-predictor.ic-shared-llm.svc.cluster.local:8080/v1"
             - name: ENDPOINT_TYPE
               value: "chat"
             - name: ENDPOINT_PATH
@@ -83,7 +83,7 @@ spec:
             # Must be set (even if empty) so the script's `read -p` prompts
             # are skipped — there is no TTY/stdin in a pod.
             - name: TOKENIZER_PATH
-              value: ""                                    # local mounted dir, or a HF repo id (e.g. ibm-granite/granite-3.1-8b-instruct) if --model doesn't resolve uniquely on the Hub; leave empty to use MODEL as-is
+              value: "ibm-granite/granite-3.3-8b-instruct"
             - name: INPUT_FILE
               value: "/prompts/conversational_chat.jsonl"
             - name: OUTPUT_DIR
