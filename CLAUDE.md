@@ -15,7 +15,7 @@ Full scenario definitions and metrics tables: see `docs/scenarios/` and `docs/me
 ## Conventions
 
 - **One bash script per scenario** is the source of truth (contains the `aiperf profile` invocation and its flags/values). No separate YAML config schema — the script *is* the config.
-- Kubernetes (Job/Helm — primary delivery) and the jumphost fallback (native pip/binary install, no Docker — roadmap, not built yet) both call the **same** per-scenario scripts. Never fork scenario logic between the two.
+- Kubernetes (Job — primary delivery) and the jumphost fallback (native pip/binary install, no Docker — roadmap, not built yet) both call the **same** per-scenario scripts. Never fork scenario logic between the two.
 - **Output = raw AIPerf export.** No processed/reformatted report layer currently — decided deliberately, keep it that way unless revisited.
 - **Reproducibility = Git.** Scripts and their run outputs are both committed. Pin the AIPerf version used per run.
 - If you change a scenario's parameters (ISL/OSL, turns, think-time, concurrency), update the corresponding table in `docs/scenarios/` in the same change — the docs and the scripts must stay in sync, since the docs are what gets shown to customers.
