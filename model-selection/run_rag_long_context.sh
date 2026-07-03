@@ -8,9 +8,11 @@
 #
 # Workload shape (V1 baseline, real sample prompts):
 #   - Prompts: model-selection/prompts/rag_long_context.jsonl — real
-#     single-turn requests (--custom-dataset-type random_pool), each a long
+#     single-turn requests (--custom-dataset-type mooncake_trace, keyed on
+#     "text_input" per AIPerf's MooncakeTrace schema), each a long
 #     retrieved-document-style context followed by a question. NOT synthetic
-#     token noise.
+#     token noise. Each record is replayed exactly once, in file order
+#     (mooncake_trace semantics) — NOT randomly sampled with replacement.
 #   - ISL: ~4,000 tokens (fixed), driven by the prompt file content itself
 #   - OSL: 250 tokens
 #   - Turns: 1 (single-turn; no conversation/think-time flags apply)
@@ -18,10 +20,16 @@
 #   - Concurrency: baseline 1. Set CONCURRENCY to run a sweep point
 #     (1/5/10/25) instead.
 #
-# This mirrors sample-script.sh's random_pool + text_input pattern rather
-# than the multi_turn dataset type, which is still unresolved
-# (AIPerf rejects fields like turn_delay we haven't tracked down the exact
-# schema for yet — see run_conversational_chat.sh).
+# NOTE: --custom-dataset-type random_pool was tried first but rejected by
+# AIPerf ("At least one modality must be provided") — RandomPool's schema
+# only recognizes text/texts (or image/audio/video) keys, not text_input.
+# text_input belongs to MooncakeTrace, which is also the better semantic
+# fit here (deterministic single-turn replay, not pool sampling).
+#
+# This mirrors sample-script.sh's text_input pattern rather than the
+# multi_turn dataset type, which is still unresolved (AIPerf rejects fields
+# like turn_delay we haven't tracked down the exact schema for yet — see
+# run_conversational_chat.sh).
 #
 # MODEL and URL are read from environment variables if set, otherwise
 # the script will prompt for them interactively.
@@ -47,8 +55,7 @@ set -euo pipefail
 
 # ---- Config (override via env vars if you like) ----------------------------
 INPUT_FILE="${INPUT_FILE:-$(dirname "$0")/prompts/rag_long_context.jsonl}"
-CUSTOM_DATASET_TYPE="${CUSTOM_DATASET_TYPE:-random_pool}"
-DATASET_SAMPLING_STRATEGY="${DATASET_SAMPLING_STRATEGY:-random}"
+CUSTOM_DATASET_TYPE="${CUSTOM_DATASET_TYPE:-mooncake_trace}"
 ENDPOINT_TYPE="${ENDPOINT_TYPE:-chat}"
 ENDPOINT_PATH="${ENDPOINT_PATH:-/v1/chat/completions}"
 CONCURRENCY="${CONCURRENCY:-1}"                          # baseline; sweep: 1/5/10/25
@@ -130,7 +137,7 @@ echo "Scenario:     RAG / Long-Context Q&A (Model Selection)"
 echo "Model:        $MODEL"
 echo "URL:          $URL"
 echo "Endpoint:     $ENDPOINT_TYPE $ENDPOINT_PATH"
-echo "Input file:   $INPUT_FILE ($CUSTOM_DATASET_TYPE, $DATASET_SAMPLING_STRATEGY)"
+echo "Input file:   $INPUT_FILE ($CUSTOM_DATASET_TYPE)"
 echo "Concurrency:  $CONCURRENCY"
 echo "OSL:          ${OUTPUT_TOKENS_MEAN} tokens"
 if [ -n "${TOKENIZER_PATH:-}" ]; then
@@ -154,7 +161,6 @@ aiperf profile \
     --streaming \
     --input-file "$INPUT_FILE" \
     --custom-dataset-type "$CUSTOM_DATASET_TYPE" \
-    --dataset-sampling-strategy "$DATASET_SAMPLING_STRATEGY" \
     --output-tokens-mean "$OUTPUT_TOKENS_MEAN" \
     --concurrency "$CONCURRENCY" \
     --warmup-request-count "$WARMUP_REQUESTS" \
