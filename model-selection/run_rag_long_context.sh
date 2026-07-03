@@ -26,9 +26,15 @@
 # MODEL and URL are read from environment variables if set, otherwise
 # the script will prompt for them interactively.
 #
+# HF_TOKEN (optional) is read from the environment if set, otherwise the
+# script will prompt for it — only needed when TOKENIZER_PATH points at a
+# gated/private HuggingFace repo (e.g. meta-llama/*) rather than a local
+# directory. It is exported so transformers/huggingface_hub picks it up.
+#
 # Usage:
 #   MODEL=my-model URL=http://localhost:8000 ./run_rag_long_context.sh
 #   CONCURRENCY=10 MODEL=my-model URL=http://localhost:8000 ./run_rag_long_context.sh
+#   HF_TOKEN=hf_xxx TOKENIZER_PATH=meta-llama/Llama-3.1-8B MODEL=my-model URL=http://localhost:8000 ./run_rag_long_context.sh
 #   ./run_rag_long_context.sh                 # will prompt for both
 #
 set -euo pipefail
@@ -73,6 +79,20 @@ if [ -n "${TOKENIZER_PATH:-}" ]; then
     TOKENIZER_ARGS=(--tokenizer "$TOKENIZER_PATH")
 fi
 
+# ---- Get HF_TOKEN: env var, else prompt (optional) --------------------------
+# Only needed when the tokenizer must be pulled from a gated/private HF repo
+# (e.g. meta-llama/*). Skipped entirely for local tokenizer dirs, since those
+# run fully offline (HF_HUB_OFFLINE=1 above).
+if [ -z "${TOKENIZER_PATH:-}" ] || [ ! -d "${TOKENIZER_PATH:-}" ]; then
+    if [ -z "${HF_TOKEN:-}" ]; then
+        read -r -s -p "HuggingFace token (--token, leave empty if tokenizer is public/already cached): " HF_TOKEN
+        echo
+    fi
+fi
+if [ -n "${HF_TOKEN:-}" ]; then
+    export HF_TOKEN
+fi
+
 # ---- Get OUTPUT_DIR: env var, else prompt -----------------------------------
 if [ -z "${OUTPUT_DIR:-}" ]; then
     read -r -p "Directory to store benchmark results [default: ./artifacts]: " OUTPUT_DIR
@@ -103,6 +123,11 @@ if [ -n "${TOKENIZER_PATH:-}" ]; then
     echo "Tokenizer:    $TOKENIZER_PATH (local, HF Hub disabled)"
 else
     echo "Tokenizer:    (none specified, AIPerf will resolve via HuggingFace)"
+fi
+if [ -n "${HF_TOKEN:-}" ]; then
+    echo "HF_TOKEN:     set"
+else
+    echo "HF_TOKEN:     (none, only needed for gated/private tokenizer repos)"
 fi
 echo "Output dir:   $OUTPUT_DIR"
 echo "----------------------------------------"
