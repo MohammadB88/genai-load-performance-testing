@@ -31,10 +31,16 @@
 # gated/private HuggingFace repo (e.g. meta-llama/*) rather than a local
 # directory. It is exported so transformers/huggingface_hub picks it up.
 #
+# HF_HOME (optional) overrides where huggingface_hub caches downloaded
+# tokenizer files. Set this if you hit a PermissionError against the image's
+# default cache dir (e.g. /app/.cache/huggingface in a non-root/read-only
+# container) — point it at a writable path instead, e.g. /tmp/hf-cache.
+#
 # Usage:
 #   MODEL=my-model URL=http://localhost:8000 ./run_rag_long_context.sh
 #   CONCURRENCY=10 MODEL=my-model URL=http://localhost:8000 ./run_rag_long_context.sh
 #   HF_TOKEN=hf_xxx TOKENIZER_PATH=meta-llama/Llama-3.1-8B MODEL=my-model URL=http://localhost:8000 ./run_rag_long_context.sh
+#   HF_HOME=/tmp/hf-cache TOKENIZER_PATH=ibm-granite/granite-3.1-8b-instruct MODEL=my-model URL=http://localhost:8000 ./run_rag_long_context.sh
 #   ./run_rag_long_context.sh                 # will prompt for both
 #
 set -euo pipefail
@@ -91,6 +97,14 @@ if [ -z "${TOKENIZER_PATH:-}" ] || [ ! -d "${TOKENIZER_PATH:-}" ]; then
 fi
 if [ -n "${HF_TOKEN:-}" ]; then
     export HF_TOKEN
+fi
+
+# ---- HF cache dir override (avoids PermissionError in read-only/non-root
+# containers, where the image's default HF_HOME e.g. /app/.cache/huggingface
+# isn't writable by the runtime user) ----------------------------------------
+if [ -n "${HF_HOME:-}" ]; then
+    export HF_HOME
+    mkdir -p "$HF_HOME"
 fi
 
 # ---- Get OUTPUT_DIR: env var, else prompt -----------------------------------
