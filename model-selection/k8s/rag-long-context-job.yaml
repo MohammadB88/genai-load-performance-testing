@@ -18,6 +18,11 @@
 #   kubectl create configmap aiperf-rag-long-context-prompts \
 #     --from-file=rag_long_context.jsonl=model-selection/prompts/rag_long_context.jsonl \
 #     -n <namespace>
+#   kubectl create secret generic aiperf-hf-token \
+#     --from-literal=HF_TOKEN=hf_xxx \
+#     -n <namespace>
+#   # Only needed if TOKENIZER_PATH points at a gated/private HF repo (e.g.
+#   # meta-llama/*); otherwise omit the secret and leave HF_TOKEN unset below.
 #   kubectl apply -f model-selection/k8s/rag-long-context-job.yaml -n <namespace>
 #
 # Retrieve results after completion:
@@ -27,6 +32,9 @@
 # Required edits before applying:
 #   - image: pin to the exact NGC AIPerf tag you're using
 #   - env.MODEL / env.URL: set to the target model and endpoint
+#   - aiperf-hf-token secret: only needed if TOKENIZER_PATH is a gated/private
+#     HF repo; the HF_TOKEN env is marked optional so the Job still runs fine
+#     without the secret present
 ---
 apiVersion: batch/v1
 kind: Job
@@ -77,7 +85,17 @@ spec:
             # Must be set (even if empty) so the script's `read -p` prompts
             # are skipped — there is no TTY/stdin in a pod.
             - name: TOKENIZER_PATH
-              value: ""                                    # local mounted dir, or a HF repo id (e.g. ibm-granite/granite-3.1-8b-instruct) if --model doesn't resolve uniquely on the Hub; leave empty to use MODEL as-is
+              value: "mradermacher/granite-3.3-8b-instruct-abliterated-i1-GGUF"     
+            - name: TOKENIZER_TRUST_REMOTE_CODE
+              value: "1"  
+            - name: HF_HOME
+              value: "/tmp/hf-cache"                                   # local mounted dir, or a HF repo id (e.g. ibm-granite/granite-3.1-8b-instruct) if --model doesn't resolve uniquely on the Hub; leave empty to use MODEL as-is
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: aiperf-hf-token                     # TODO: remove this env entry if TOKENIZER_PATH is not a gated/private HF repo
+                  key: HF_TOKEN
+                  optional: true
             - name: INPUT_FILE
               value: "/prompts/rag_long_context.jsonl"
             - name: OUTPUT_DIR

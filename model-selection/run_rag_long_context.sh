@@ -44,11 +44,18 @@
 # default cache dir (e.g. /app/.cache/huggingface in a non-root/read-only
 # container) — point it at a writable path instead, e.g. /tmp/hf-cache.
 #
+# TOKENIZER_TRUST_REMOTE_CODE (optional, default off) — set to 1 to pass
+# --tokenizer-trust-remote-code. Needed for repos whose tokenizer requires
+# executing custom Python from the HF repo (AIPerf will error with "Failed
+# to load tokenizer" and suggest this flag if so). This runs arbitrary code
+# from that repo — review it on HuggingFace before enabling.
+#
 # Usage:
 #   MODEL=my-model URL=http://localhost:8000 ./run_rag_long_context.sh
 #   CONCURRENCY=10 MODEL=my-model URL=http://localhost:8000 ./run_rag_long_context.sh
 #   HF_TOKEN=hf_xxx TOKENIZER_PATH=meta-llama/Llama-3.1-8B MODEL=my-model URL=http://localhost:8000 ./run_rag_long_context.sh
 #   HF_HOME=/tmp/hf-cache TOKENIZER_PATH=ibm-granite/granite-3.1-8b-instruct MODEL=my-model URL=http://localhost:8000 ./run_rag_long_context.sh
+#   TOKENIZER_TRUST_REMOTE_CODE=1 TOKENIZER_PATH=mradermacher/granite-3.3-8b-instruct-abliterated-i1-GGUF MODEL=my-model URL=http://localhost:8000 ./run_rag_long_context.sh
 #   ./run_rag_long_context.sh                 # will prompt for both
 #
 set -euo pipefail
@@ -90,6 +97,15 @@ if [ -n "${TOKENIZER_PATH:-}" ]; then
         export TRANSFORMERS_OFFLINE=1
     fi
     TOKENIZER_ARGS=(--tokenizer "$TOKENIZER_PATH")
+fi
+
+# ---- Get TOKENIZER_TRUST_REMOTE_CODE: env var only, default off -------------
+# Some repos (e.g. custom fine-tunes/quantizations without a standard
+# tokenizer_config.json) require executing tokenizer code from the HF repo
+# itself. Off by default since it runs arbitrary Python from that repo —
+# review the repo's code before setting this to 1.
+if [ "${TOKENIZER_TRUST_REMOTE_CODE:-0}" = "1" ]; then
+    TOKENIZER_ARGS+=(--tokenizer-trust-remote-code)
 fi
 
 # ---- Get HF_TOKEN: env var, else prompt (optional) --------------------------
@@ -144,6 +160,9 @@ if [ -n "${TOKENIZER_PATH:-}" ]; then
     echo "Tokenizer:    $TOKENIZER_PATH (local, HF Hub disabled)"
 else
     echo "Tokenizer:    (none specified, AIPerf will resolve via HuggingFace)"
+fi
+if [ "${TOKENIZER_TRUST_REMOTE_CODE:-0}" = "1" ]; then
+    echo "Trust remote code: yes (--tokenizer-trust-remote-code)"
 fi
 if [ -n "${HF_TOKEN:-}" ]; then
     echo "HF_TOKEN:     set"

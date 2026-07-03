@@ -72,6 +72,15 @@ if [ -n "${TOKENIZER_PATH:-}" ]; then
     TOKENIZER_ARGS=(--tokenizer "$TOKENIZER_PATH")
 fi
 
+# ---- Get TOKENIZER_TRUST_REMOTE_CODE: env var only, default off -------------
+# Some repos (e.g. custom fine-tunes/quantizations without a standard
+# tokenizer_config.json) require executing tokenizer code from the HF repo
+# itself. Off by default since it runs arbitrary Python from that repo —
+# review the repo's code before setting this to 1.
+if [ "${TOKENIZER_TRUST_REMOTE_CODE:-0}" = "1" ]; then
+    TOKENIZER_ARGS+=(--tokenizer-trust-remote-code)
+fi
+
 # ---- Get OUTPUT_DIR: env var, else prompt -----------------------------------
 if [ -z "${OUTPUT_DIR:-}" ]; then
     read -r -p "Directory to store benchmark results [default: ./artifacts]: " OUTPUT_DIR
@@ -103,6 +112,9 @@ if [ -n "${TOKENIZER_PATH:-}" ]; then
     echo "Tokenizer:    $TOKENIZER_PATH (local, HF Hub disabled)"
 else
     echo "Tokenizer:    (none specified, AIPerf will resolve via HuggingFace)"
+fi
+if [ "${TOKENIZER_TRUST_REMOTE_CODE:-0}" = "1" ]; then
+    echo "Trust remote code: yes (--tokenizer-trust-remote-code)"
 fi
 echo "Output dir:   $OUTPUT_DIR"
 echo "----------------------------------------"
