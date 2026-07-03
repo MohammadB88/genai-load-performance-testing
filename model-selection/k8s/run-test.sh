@@ -152,6 +152,7 @@ for entry in "${TESTS[@]}"; do
     TEST_NAMES+=("${entry%%|*}")
 done
 
+chmod +x "$SCRIPT_DIR/generate-configmaps.sh"
 "$SCRIPT_DIR/generate-configmaps.sh" -n "$NAMESPACE" $(printf -- '-s %s ' "${TEST_NAMES[@]}")
 for name in "${TEST_NAMES[@]}"; do
     CREATED_RESOURCES+=("configmap/aiperf-${name}-script" "configmap/aiperf-${name}-prompts")
