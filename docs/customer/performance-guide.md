@@ -733,7 +733,38 @@ Request Completion Rate: "Higher indicates reliable complex query handling"
 
 ## 6. Understanding Results
 
-*[Content to be developed]*
+### 6.1 Overview of AIPerf Output
+- Brief overview of the provided output format and output files (e.g., CSV/JSON files written to `./artifacts/<scenario>/`).
+- Reference to the `metrics-directory` where metric summary tables are stored for quick reference.
+
+### 6.2 Core Metrics Explained
+- Include a placeholder chart/graph illustrating typical TTFT and ITL versus concurrency for a "good" model vs. a "bad" model.
+- Reference the metric tables stored under the `metrics-directory`; these tables contain column headings such as `scenario`, `concurrency`, `ttft_ms`, `itl_ms`, `goodput_pct`, `success_rate`.
+
+### 6.3 Reading Latency‑vs‑Concurrency Curves
+- Provide a simple heuristic for locating the “knee”: look for where the latency increase per added concurrency exceeds a noticeable threshold.
+- **Notice**: Readers can dive deeper into the three zones (Linear, Knee, Saturation) if desired; this notice hints at the optional detailed explanation.
+
+### 6.4 Mapping Results to Service‑Level Agreements (SLAs)
+- High‑level guidance: use your SLA (e.g., 95 % of requests < 2 s TTFT) to read off the maximum sustainable concurrency from the latency‑vs‑concurrency curve.
+- **Notice (Option B)**: A placeholder example table could show concurrency, 95th‑percentile TTFT, and SLA compliance status.
+
+### 6.5 Model‑Comparison Framework
+- Recommend testing all candidates at each concurrency level (1/5/10/25) and presenting side‑by‑side tables (placeholder) of TTFT, ITL, Goodput, and Success Rate.
+- **Notice (Option D)**: A brief decision‑tree can be added to help prioritize metrics based on business focus (latency‑sensitive, throughput‑sensitive, quality‑sensitive).
+
+### 6.6 Preliminary Infrastructure Insights (Placeholder)
+- Note that the observed knee in model‑selection curves provides a rough upper bound for a single‑node/GPU estimate; full infrastructure sizing will be covered in a future version (Section 8 or a dedicated sizing guide).
+
+### 6.7 Validating Result Quality
+- Quick reminder to verify that results look reasonable before proceeding.
+- **Notice (Option A)**: Short bullet list – check token counts, spot‑check responses for basic coherence, scan logs for errors.
+- **Notice (Option B)**: More detailed checklist (e.g., `grep -i error *.log`, verify input/output token counts) can be added later.
+
+### 6.8 Using Results for Next Steps
+- Minimal wrap‑up: document the chosen model and note that it will feed into the upcoming infrastructure‑sizing suite.
+- **Notice (Option A)**: Short checklist – archive results, write model‑selection rationale, prepare sizing suite.
+- **Notice (Option B)**: Expanded checklist can be added later (e.g., stakeholder review, baseline establishment).
 
 ---
 
