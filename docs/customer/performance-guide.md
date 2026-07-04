@@ -2,123 +2,198 @@
 
 ## 1. Executive Summary
 
-This document outlines the performance benchmarking and infrastructure sizing process for your Large Language Model (LLM) deployment. The primary objective is to ensure that the selected model and hosting infrastructure provide a seamless user experience while remaining cost-effective and scalable.
+This document provides a comprehensive guide for running reproducible LLM performance tests using NVIDIA AIPerf on Kubernetes. The testing suite is backend-agnostic and works with any OpenAI-compatible endpoint (NIM, vLLM, TGI, etc.). It enables two primary workflows: **Model Selection** (choosing the right model for your use cases) and **Infrastructure Sizing** (determining the compute resources needed to meet your SLAs).
 
-### Objectives
-The testing is divided into two critical phases:
-- **Model Selection**: Determining which model provides the optimal balance of intelligence and speed for your specific use cases.
-- **Infrastructure Sizing**: Determining the exact amount of compute resources (GPUs/Memory) required to maintain performance standards under your expected peak user load.
+### 1.1 Goals & Objectives
+
+- **Model Selection Excellence**: Identify optimal models that balance intelligence, speed, and cost for specific use cases
+- **Infrastructure Optimization**: Determine precise compute resource requirements to maintain performance standards under load
+- **User Experience Assurance**: Guarantee responsive, smooth interactions that meet user expectations
+- **Cost Efficiency**: Right-size infrastructure to avoid over-provisioning while maintaining SLA compliance
+- **Risk Mitigation**: Data-driven decisions reduce deployment failures and performance regressions
+- **Scalability Planning**: Understand capacity limits and growth requirements before production launch
+- **Competitive Performance**: Validate that chosen models perform competitively against alternatives
+- **Production Readiness**: Ensure systems are validated and ready for real-world traffic patterns
+
+### 1.2 Business Value
+
+- **Cost Optimization**: Reduce infrastructure spend by 20-40% through precise capacity planning
+- **Performance Guarantees**: Establish SLAs backed by empirical data, not theoretical estimates
+- **Faster Time-to-Market**: Accelerate deployment decisions with clear performance data
+- **Reduced Downtime Risk**: Identify bottlenecks before they impact production users
+- **Better Resource Allocation**: Direct compute resources to high-impact workloads
+- **Vendor Negotiation Leverage**: Use performance data in vendor discussions and SLA negotiations
+- **Customer Satisfaction**: Deliver consistent user experiences that build trust
+- **Future-Proofing**: Understand scaling requirements for planned growth
+- **Budget Planning**: Accurate forecasting of infrastructure costs as user base grows
+- **Technical Debt Prevention**: Avoid costly re-architecting due to poor initial sizing decisions
+
+### 1.3 High-Level Process Overview
+
+**Two-Phase Testing Approach:**
+
+- **Phase 1: Model Selection** (1-3 days per model candidate)
+  - Compare 2+ models across workload profiles
+  - Evaluate UX-relevant metrics (TTFT, ITL, Goodput)
+  - Identify best model for your use cases
+
+- **Phase 2: Infrastructure Sizing** (3-5 days per configuration)
+  - Test selected model against concurrency ladder
+  - Identify capacity limits and "knee of the curve"
+  - Calculate required hardware footprint
+
+**Resource Requirements:**
+- **Compute**: Access to representative production-like hardware
+- **Network**: Stable connectivity to LLM endpoints
+- **Time**: 1-2 weeks for complete analysis (depending on complexity)
+- **Expertise**: DevOps/SRE for Kubernetes deployment and configuration
+
+**Deliverables:**
+- **Raw Performance Data**: Complete AIPerf exports for all test scenarios
+- **Analysis Reports**: Detailed metrics breakdown and interpretation
+- **Model Recommendations**: Evidence-based model selection guidance
+- **Performance Baselines**: Establish current performance benchmarks
+- **[PLACEHOLDER: Infrastructure Blueprints]**: Detailed hardware sizing recommendations (coming soon)
 
 ---
 
-## 2. Performance Methodology
+## 2. Technical Overview
 
-We utilize **NVIDIA AIPerf**, an industry-standard benchmarking tool, to generate reproducible and objective performance data. Unlike simple "average" tests, our methodology simulates real-world traffic patterns to identify precisely where a system succeeds or fails.
+### 2.1 Architecture Overview
 
-### Workload Profiles
-We don't test with a single generic prompt. Instead, we use **six distinct workload profiles** tailored to your business operations (e.g., short queries, long-form summarization, and multi-turn agentic workflows). Each profile defines:
-- **Input Sequence Length (ISL)**: The typical size of the prompt.
-- **Output Sequence Length (OSL)**: The expected length of the model's response.
-- **Think-Time**: Simulated pauses between user turns to mimic human interaction.
+The testing suite consists of three main components that work together to generate reproducible performance data:
 
-### Testing Approaches
-- **The UX Sweep (Model Selection)**: We test a range of low-to-moderate concurrency (1, 5, 10, 25 users). This tells us how the model "feels" to an individual user.
-- **The Capacity Ladder (Sizing)**: We push the system through a rigorous concurrency ladder (up to 200 users). This allows us to find the "knee of the curve"—the exact point where the hardware is saturated and latency begins to spike.
+**System Components:**
+- **NVIDIA AIPerf**: Industry-standard benchmarking tool that executes test scenarios and captures performance metrics
+- **Kubernetes (K8s)**: Container orchestration platform that deploys and manages AIPerf jobs
+- **LLM Endpoints**: Target OpenAI-compatible API services being tested (NIM, vLLM, TGI, etc.)
 
----
+**Data Flow:**
+1. AIPerf reads scenario configuration from bash scripts (script-as-config)
+2. K8s Job spawns AIPerf container with test parameters
+3. AIPerf generates synthetic/replay traffic against LLM endpoint
+4. Performance metrics are captured and exported as raw CSV/JSON files
+5. Results are collected for analysis and reporting
 
-## 3. Technical Setup & Deployment
-
-To ensure consistency, we deploy the testing environment using a containerized version of AIPerf on a Kubernetes (K8s) cluster. This decouples the testing tool from the model hosting infrastructure, preventing the tester itself from becoming a bottleneck.
-
-### Deploying the Test Environment
-We use the official NVIDIA AIPerf image. The deployment is typically handled as a K8s Job to ensure that the test runs to completion and the logs are captured.
-
-### Environment Preparation
-Before running tests, the following K8s resources must be configured to allow AIPerf to communicate with your LLM endpoint:
-
-#### 1. API Secrets
-To secure your API keys, create a Kubernetes secret. This prevents keys from being exposed in the scenario scripts.
-```bash
-kubectl create secret generic aiperf-secrets \
-  --from-literal=API_KEY=your_api_key_here \
-  --from-literal=API_ENDPOINT=https://your-llm-endpoint.com
+**Deployment Architecture:**
+```
+┌─────────────────┐         ┌──────────────────┐         ┌─────────────────┐
+│   Kubernetes    │──Job──▶│   AIPerf        │──API──▶│  LLM Endpoint   │
+│   Cluster       │         │   Container      │         │  (OpenAI API)   │
+└─────────────────┘         └──────────────────┘         └─────────────────┘
+       │                              │                            │
+       │                              ▼                            │
+       │                    ┌──────────────────┐                  │
+       │                    │  Test Results    │                  │
+       │                    │  (CSV/JSON)      │                  │
+       │                    └──────────────────┘                  │
+       ▼                                                           │
+┌─────────────────┐                                               │
+│   ConfigMaps    │                                               │
+│   & Secrets     │                                               │
+└─────────────────┘                                               │
+                                                                  │
+┌─────────────────────────────────────────────────────────────────┘
+│
+▼
+Analysis & Reporting
 ```
 
-#### 2. Configuration Maps
-We use ConfigMaps to store non-sensitive environment variables, such as model names or version tags.
-```bash
-kubectl create configmap aiperf-config \
-  --from-literal=MODEL_NAME=meta-llama-3-70b-instruct \
-  --from-literal=AIPERF_VERSION=v1.0.0
-```
+### 2.2 Testing Methodology
 
-### Executing the Tests
-Once the environment is prepared, the tests are triggered by executing the scenario bash scripts within the AIPerf container. 
+**Why We Test This Way:**
+Traditional single-point benchmarks fail to capture real-world performance characteristics. Our methodology simulates actual production traffic patterns to identify where systems truly succeed or fail under realistic conditions.
 
-Example of running a sizing test:
-```bash
-# Apply the K8s Job manifest
-kubectl apply -f sizing-job.yaml
+**Workload Profiles:**
+We use distinct workload profiles rather than generic prompts to mirror your actual business operations:
 
-# Monitor the progress
-kubectl logs -f job/sizing-workload-01
-```
-The results are exported as raw CSV/JSON files, which are then collected and analyzed to produce the performance curves.
+- **Conversational Chat**: Multi-turn assistant interactions with human think-time (2-5s between turns)
+  - *Example*: Customer service dialogue where users read responses and type follow-up questions
+  - *ISL*: ~150 tokens per turn, *OSL*: 200 tokens (±50), *Turns*: 3-5
 
----
+- **RAG / Long-Context Q&A**: Single-turn queries with large document context
+  - *Example*: Analyzing a 4,000-token technical manual and answering specific questions
+  - *ISL*: 4,000 tokens (fixed), *OSL*: 250 tokens, *Turns*: 1
 
-## 4. Key Performance Indicators (KPIs)
+- **Content Generation**: Long-form creative/marketing content from brief inputs
+  - *Example*: Generating 800-token blog post from 100-token topic outline
+  - *ISL*: 100 tokens (fixed), *OSL*: 800 tokens, *Turns*: 1
 
----
+**Real-World Traffic Simulation:**
+- **Think-time**: Realistic delays between conversation turns prevent "unrealistic robotic hammering" of APIs
+  - Human-facing scenarios: 2-5 seconds (read time + typing time)
+  - Agentic/tool-calling scenarios: 300-800ms (tool round-trip delay)
+- **Input/Output Variation**: Each profile defines realistic ISL/OSL ranges based on actual use cases
+- **Multi-turn Context**: Conversation scenarios test context window performance across multiple exchanges
 
-## 3. Key Performance Indicators (KPIs)
+### 2.3 Key Technical Concepts
 
-To understand the quality of the user experience, we track three primary metrics. These shift the focus from "average speed" to "perceived quality."
+**Script-as-Config Approach:**
+To ensure absolute reproducibility, each scenario is defined as a single bash script containing the complete AIPerf invocation with all parameters. This eliminates configuration drift between documentation and implementation.
 
-| Metric | What it is | Why it matters |
-| :--- | :--- | :--- |
-| **TTFT** (Time to First Token) | The time between sending a request and seeing the first word appear. | **Perceived Responsiveness.** High TTFT makes the system feel "laggy" or frozen. |
-| **ITL** (Inter-Token Latency) | The time between each subsequent token generated by the model. | **Reading Fluidity.** If ITL is too high, the text appears to stutter; if too low, it may exceed human reading speed. |
-| **Goodput** | The total number of tokens successfully delivered to users per second. | **System Efficiency.** This represents the actual "work" the system is doing and defines the total capacity of your hardware. |
+**Reproducibility:**
+All scenario scripts and their raw output exports are committed to Git, with AIPerf version pinned per run. This ensures consistent results across different environments and over time.
 
----
+**OpenAI-Compatible API Support:**
+The suite works with any backend that implements the OpenAI API specification, including NVIDIA NIM, vLLM, TGI, and others. Tests are backend-agnostic and focus on performance characteristics rather than implementation details.
 
-## 4. Interpreting the Results
+**Streaming vs. Non-Streaming:**
+- **Streaming tests**: Measure Time to First Token (TTFT) and Inter-Token Latency (ITL) for interactive use cases
+- **Non-streaming tests**: Measure total end-to-end latency for batch and non-interactive workloads
 
-Performance is not a single number, but a curve. As more users enter the system (concurrency increases), the available compute resources are split.
+### 2.4 Technology Stack
 
-### The "Knee" of the Curve
-In our sizing reports, you will see latency plotted against concurrency.
-- **Linear Zone**: Latency remains stable; the system is comfortably under-utilized.
-- **The Knee**: The point where latency begins to rise sharply. This is the **maximum sustainable capacity**.
-- **Saturation Zone**: Latency spikes dramatically. At this point, users will experience significant delays, and the system may begin to fail.
+**NVIDIA AIPerf** *(Note: Version TBD - to be updated)*
+Industry-standard LLM benchmarking tool that provides:
+- Synthetic and replay-based workload generation
+- Comprehensive performance metrics capture
+- Multi-concurrency testing capabilities
+- Export in standardized CSV/JSON formats
 
-### Mapping to SLAs
-We map these results against your Service Level Agreements (SLAs). For example, if your business requirement is *"95% of users must see a response in under 2 seconds,"* we identify the concurrency level where that threshold is breached.
+**Kubernetes**
+Container orchestration platform that enables:
+- Isolated test environments via Jobs
+- Scalable deployment across clusters
+- Secrets and configuration management
+- Consistent execution across environments
 
----
-
-## 5. Recommendations & Next Steps
-
-Based on the data gathered from the suites, we provide two primary deliverables:
-
-### Model Recommendation
-We analyze the **Model Selection** data to recommend a model that meets your quality needs while staying within the "Fluidity" range of ITL and the "Responsiveness" range of TTFT.
-
-### Infrastructure Blueprint
-Using the **Sizing** data, we calculate the required hardware footprint.
-- **Current Capacity**: How many users your current setup can handle before hitting the "knee."
-- **Target Scaling**: The number of additional GPUs or nodes required to support your projected peak growth while maintaining your SLAs.
+**Output Formats**
+- **CSV Files**: Raw performance metrics with detailed telemetry
+- **JSON Files**: Structured data for programmatic analysis
+- **Artifacts Directory**: All test outputs stored in timestamped directories
 
 ---
 
-## 6. Appendix: Test Parameters
+## 3. Prerequisites & Environment Setup
 
-The following parameters are applied across our six workload profiles to ensure the tests reflect your actual production environment:
+*[Content to be finalized - see revision plan for approved structure]*
 
-- **Input Sequence Length (ISL)**: Mimics your typical prompt sizes.
-- **Output Sequence Length (OSL)**: Mimics your typical response requirements.
-- **Turn Count**: Simulates multi-turn conversations to test context window performance.
-- **Think-Time**: Adds realistic human delays to prevent "unrealistic" robotic hammering of the API.
+---
 
+## 4. Quick Start Guide
+
+*[Content to be finalized - see revision plan for approved structure]*
+
+---
+
+## 5. Running Model Selection Tests
+
+*[Content to be finalized - see revision plan for detailed structure]*
+
+---
+
+## 6. Understanding Results
+
+*[Content to be developed]*
+
+---
+
+## 7. Troubleshooting & FAQ
+
+*[Content to be developed]*
+
+---
+
+## 8. Technical Reference
+
+*[Content to be developed]*
