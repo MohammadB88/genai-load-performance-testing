@@ -166,7 +166,174 @@ Container orchestration platform that enables:
 
 ## 3. Prerequisites & Environment Setup
 
-*[Content to be finalized - see revision plan for approved structure]*
+### 3.1 Infrastructure Requirements
+
+**Kubernetes Cluster**
+- Kubernetes v1.25+ (compatible with standard K8s Job API)
+- Minimum 2 nodes with at least 4 CPUs and 8GB RAM each
+- Persistent storage for test artifacts (for result retention)
+- Network connectivity to LLM endpoints being tested
+- Default storage class configured for persistent volumes
+
+**LLM Endpoint Accessibility**
+- OpenAI-compatible API endpoint URL and port
+- API key authentication (if required)
+- **Critical**: Model-API endpoints must be reachable from the testing environment
+- TLS certificate verification (or disabled if using self-signed certs)
+
+### 3.2 Software Requirements
+
+**On Your Development Machine:**
+- `kubectl` v1.25+ (cluster access and management)
+- `git` (for repository operations and reproducibility)
+- Bash shell or compatible terminal
+
+**In the Kubernetes Cluster:**
+- Container runtime (Docker, containerd, etc.)
+- Pull access to AIPerf container images:
+  - **Primary**: NVIDIA NGC catalog (if you have NVIDIA credentials)
+  - **Alternative**: Private container registry (ensure pull secrets are configured)
+- Network policies allowing outbound API calls to test endpoints
+
+### 3.3 Access Requirements
+
+**Repository Access**
+- Git clone access to the testing suite repository
+- Read access to scenario scripts and configuration files
+- Write access if you plan to commit test results back
+
+**Cluster Access**
+- `kubectl` configured with cluster credentials
+- Namespace where test jobs will run (default: `aiperf`)
+- RBAC permissions: create Job, Pod, ServiceAccount, ConfigMap, Secret
+
+**API Endpoint Access**
+- API endpoint URL (e.g., `https://your-llm-endpoint.com:8000`)
+- API key or authentication credentials
+- Testing quota/limits (if applicable) to avoid rate limiting during tests
+
+### 3.4 Configuration Management
+
+**Secrets & Configuration:**
+- **API Keys**: Use Kubernetes Secrets for sensitive data (API keys, authentication tokens)
+  - **Note**: While we document K8s Secrets, you can integrate with any vault solution (HashiCorp Vault, AWS Secrets Manager, Azure Key Vault, etc.) using your preferred injection mechanism
+- **Test Parameters**: Use ConfigMaps or environment variables for non-sensitive configuration
+
+**Resource Allocation:**
+- **Default Limits**: 2 CPUs, 4GB RAM per AIPerf job (suitable for most scenarios)
+- **Adjustment Guidelines**: 
+  - High-concurrency tests: Increase resources proportionally
+  - Large-context scenarios: May require additional memory
+  - Scale based on your cluster capacity and test requirements
+- **Storage**: 10GB persistent volume per test job (configurable based on expected output size)
+
+### 3.5 Quick Environment Verification
+
+**Verify K8s Access:**
+```bash
+kubectl cluster-info
+kubectl get nodes
+```
+
+**Verify Namespace:**
+```bash
+kubectl get namespaces
+# Create default namespace if needed:
+kubectl create namespace aiperf
+kubectl config set-context --current --namespace=aiperf
+```
+
+**Verify Network Connectivity:**
+```bash
+# Test connectivity to your LLM endpoint
+kubectl run curl-test --image=curlimages/curl --rm -it --restart=Never -- \
+  curl -v https://your-llm-endpoint.com:8000/v1/models
+```
+
+**Verify Container Pull Access:**
+```bash
+# Test NGC pull (requires NGC credentials)
+kubectl run image-test --image=nvcr.io/nvidia/aiperf:latest --rm -it --restart=Never -- \
+  echo "NGC image pull successful"
+
+# OR test private registry pull
+kubectl run image-test --image=your-registry.com/aiperf:latest --rm -it --restart=Never -- \
+  echo "Private registry pull successful"
+```
+
+### 3.6 Common Issues & Troubleshooting
+
+**Issue: Model-API Not Reachable from Testing Environment**
+- **Symptoms**: Connection timeouts, DNS resolution failures
+- **Solutions**: 
+  - Verify network policies allow egress traffic to API endpoint
+  - Check firewall rules and corporate proxy settings
+  - Test connectivity from within the cluster using the verification commands above
+  - Ensure API endpoint is accessible from cluster network (not just from your dev machine)
+
+**Issue: Test Scripts or Prompts Missing**
+- **Symptoms**: File not found errors, unexpected prompt behavior
+- **Solutions**:
+  - Verify repository clone was successful and complete
+  - Check that you're in the correct branch/commit
+  - Confirm scenario scripts exist in `model-selection/` directory
+  - Validate prompt files in `model-selection/prompts/` directory
+  - Use `git status` to ensure you have all necessary files
+
+**Issue: Container Image Pull Failures**
+- **Symptoms**: Image pull errors, authentication failures
+- **Solutions**:
+  - Verify NGC credentials or private registry pull secrets are configured
+  - Check image tags and version compatibility
+  - Ensure network allows access to container registry
+  - Test image pull manually using verification commands
+
+**Issue: Insufficient Cluster Resources**
+- **Symptoms**: Pending pods, resource quota exceeded
+- **Solutions**:
+  - Scale up cluster resources (add nodes or increase node capacity)
+  - Adjust resource limits in job specifications
+  - Reduce concurrency levels to match available resources
+  - Check cluster resource usage with `kubectl describe nodes`
+
+**Issue: Persistent Volume Binding Failures**
+- **Symptoms**: Pod stuck in Pending state, PVC not bound
+- **Solutions**:
+  - Verify storage class is available and configured
+  - Check storage capacity and available storage
+  - Ensure default storage class is set
+  - Review PVC status with `kubectl get pvc`
+
+### 3.7 Known Limitations & Constraints
+
+**Current Implementation Scope:**
+- Only 3 model-selection scenarios are functional: conversational_chat, rag_long_context, content_generation
+- Sizing suite not yet implemented
+- Jumphost fallback mode (native install, no Docker) is roadmap
+
+**Test Execution Constraints:**
+- Concurrent tests should be limited to avoid overwhelming target endpoints
+- Some endpoints have rate limits - adjust concurrency accordingly
+- Large context scenarios may hit model context window limits
+
+**Resource Considerations:**
+- Each AIPerf job consumes cluster resources (CPU/Memory)
+- Result storage grows with test duration and concurrency levels
+- Network bandwidth between cluster and LLM endpoints affects measurements
+
+### 3.8 Estimated Testing Timeline
+
+**Model Selection Suite** (per model candidate):
+- Setup and environment verification: 4-8 hours
+- Test execution across 3 scenarios: 1-3 days
+- Results analysis and reporting: 4-8 hours
+- **Note**: Timeline depends on customer-specific requirements, cluster resources, endpoint performance, and desired thoroughness
+
+**Capacity/Sizing Suite** (per configuration):
+- Setup and environment verification: 4-8 hours
+- Test execution across concurrency ladder: 3-5 days
+- Results analysis and reporting: 4-8 hours
+- **Note**: Timeline depends on customer-specific requirements, cluster resources, endpoint performance, and desired thoroughness
 
 ---
 
