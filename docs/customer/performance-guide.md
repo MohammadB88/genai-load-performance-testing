@@ -1,5 +1,58 @@
 # LLM Performance Testing & Sizing Guide
 
+## Table of Contents
+
+- [1. Executive Summary](#1-executive-summary)
+  - [1.1 Goals & Objectives](#11-goals--objectives)
+  - [1.2 Business Value](#12-business-value)
+  - [1.3 High-Level Process Overview](#13-high-level-process-overview)
+- [2. Technical Overview](#2-technical-overview)
+  - [2.1 Architecture Overview](#21-architecture-overview)
+  - [2.2 Testing Methodology](#22-testing-methodology)
+  - [2.3 Key Technical Concepts](#23-key-technical-concepts)
+  - [2.4 Technology Stack](#24-technology-stack)
+- [3. Prerequisites & Environment Setup](#3-prerequisites--environment-setup)
+  - [3.1 Infrastructure Requirements](#31-infrastructure-requirements)
+  - [3.2 Software Requirements](#32-software-requirements)
+  - [3.3 Access Requirements](#33-access-requirements)
+  - [3.4 Configuration Management](#34-configuration-management)
+  - [3.5 Quick Environment Verification](#35-quick-environment-verification)
+  - [3.6 Common Issues & Troubleshooting](#36-common-issues--troubleshooting)
+  - [3.7 Known Limitations & Constraints](#37-known-limitations--constraints)
+  - [3.8 Estimated Testing Timeline](#38-estimated-testing-timeline)
+- [4. Quick Start Guide](#4-quick-start-guide)
+  - [4.1 Before You Begin](#41-before-you-begin)
+  - [4.2 Scenario Selection: Content Generation](#42-scenario-selection-content-generation)
+  - [4.3 Configuration](#43-configuration)
+  - [4.4 Running Your First Test](#44-running-your-first-test)
+  - [4.5 Understanding Sample Prompts](#45-understanding-sample-prompts)
+  - [4.6 Viewing Results](#46-viewing-results)
+  - [4.7 Key Metrics to Look For](#47-key-metrics-to-look-for)
+  - [4.8 What's Next?](#48-whats-next)
+- [5. Running Model Selection Tests](#5-running-model-selection-tests)
+  - [5.1 Testing Strategy Overview](#51-testing-strategy-overview)
+  - [5.2 Multi-Model Comparison Workflow (Default Approach)](#52-multi-model-comparison-workflow-default-approach)
+  - [5.3 Content Generation Scenario](#53-content-generation-scenario)
+  - [5.4 Conversational Chat Scenario](#54-conversational-chat-scenario)
+  - [5.5 RAG / Long-Context Scenario](#55-rag--long-context-scenario)
+  - [5.6 Common Configuration Parameters](#56-common-configuration-parameters)
+  - [5.7 Multi-Model Comparison Workflow](#57-multi-model-comparison-workflow)
+  - [5.8 Troubleshooting Model Selection Tests](#58-troubleshooting-model-selection-tests)
+  - [5.9 Summary of Findings](#59-summary-of-findings)
+- [6. Understanding Results](#6-understanding-results)
+  - [6.1 Overview of AIPerf Output](#61-overview-of-aiperf-output)
+  - [6.2 Core Metrics Explained](#62-core-metrics-explained)
+  - [6.3 Reading Latency-vs-Concurrency Curves](#63-reading-latencyvsconcurrency-curves)
+  - [6.4 Mapping Results to Service-Level Agreements (SLAs)](#64-mapping-results-to-servicelevel-agreements-slas)
+  - [6.5 Model-Comparison Framework](#65-modelcomparison-framework)
+  - [6.6 Preliminary Infrastructure Insights (Placeholder)](#66-preliminary-infrastructure-insights-placeholder)
+  - [6.7 Validating Result Quality](#67-validating-result-quality)
+  - [6.8 Using Results for Next Steps](#68-using-results-for-next-steps)
+- [7. Troubleshooting & FAQ](#7-troubleshooting--faq)
+- [8. Technical Reference](#8-technical-reference)
+
+---
+
 ## 1. Executive Summary
 
 This document provides a comprehensive guide for running reproducible LLM performance tests using NVIDIA AIPerf on Kubernetes. The testing suite is backend-agnostic and works with any OpenAI-compatible endpoint (NIM, vLLM, TGI, etc.). It enables two primary workflows: **Model Selection** (choosing the right model for your use cases) and **Infrastructure Sizing** (determining the compute resources needed to meet your SLAs).
@@ -726,8 +779,6 @@ Request Completion Rate: "Higher indicates reliable complex query handling"
 - Results should inform both model choice and infrastructure requirements for production deployment  
 - All three implemented scenarios contribute distinct insights: content generation for output quality, chat for multi-turn fluency, RAG for context handling  
 - **Note**: This section focuses on operational testing; output quality validation requires separate human evaluation filters
-
-*[Content to be finalized - see revision plan for detailed structure]*
 
 ---
 
