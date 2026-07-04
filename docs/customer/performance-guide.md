@@ -537,6 +537,196 @@ In your results, focus on these critical metrics (actual values will appear afte
 
 ## 5. Running Model Selection Tests
 
+This section provides a comprehensive, customer-focused guide for running reproducible model selection tests using the NVIDIA AIPerf suite on Kubernetes. It is organized around three core scenarios that reflect common business use cases:
+
+- **Content Generation** – Long-form marketing/content creation  
+- **Conversational Chat** – Multi-turn customer service interactions  
+- **RAG / Long-Context** – Business intelligence and document analysis  
+
+### 5.1 Testing Strategy Overview
+- **Baseline Approach**: Test each model candidate across workload profiles at multiple concurrency levels  
+- **Concurrency Flexibility**: Default suggestion uses 1/5/10/25 ladder, but you may adjust based on:
+  - Expected production load patterns  
+  - Available cluster resources  
+  - Specific SLA requirements  
+- **Test Duration Factors**:  
+  - Base request processing time (varies by model/endpoint)  
+  - Number of requests per scenario  
+  - Concurrency level (higher concurrency = more throughput but longer queueing)  
+  - Think-time delays (conversational scenarios with multi-turn)  
+  - Warm-up/cool-down periods  
+  - Typical range: 20-60 minutes per scenario per concurrency level  
+
+### 5.2 Multi-Model Comparison Workflow (Default Approach)
+Our recommended default methodology uses a **round-robin by concurrency level** approach:
+1. Test all model candidates at Concurrency = 1  
+2. Test all model candidates at Concurrency = 5  
+3. Test all model candidates at Concurrency = 10  
+4. Test all model candidates at Concurrency = 25  
+- **Why this approach?** Direct comparison at each load level makes it easy to see relative scaling characteristics  
+- **Customization**: For specific use cases, you may focus on particular scenarios only  
+- **Consistency Critical**: Maintain identical cluster state, time of day, and network conditions  
+
+### 5.3 Content Generation Scenario  
+**Business Use Cases**:  
+- Marketing copy generation  
+- Article/report writing  
+- Creative content production  
+- Product description text generation  
+
+**Technical Configuration**:  
+- Fixed input (~100 tokens): Short creative/marketing briefs from real prompts  
+- Fixed output (800 tokens): Long-form content generation  
+- Single-turn interaction (no conversation/think-time flags)  
+- Streaming enabled for token-by-token output  
+- Dataset: `content_generation.jsonl` with real marketing prompts  
+
+**Execution**:  
+```bash
+# Set environment variables (or use defaults)
+export MODEL=my-llm-instruct
+export URL=http://localhost:8000
+export ENDPOINT_TYPE=chat
+export ENDPOINT_PATH=/v1/chat/completions
+
+# Run with desired concurrency (e.g., 5)
+CONCURRENCY=5 ./run_content_generation.sh
+```
+
+**Duration Expectation**: 20-40 minutes per concurrency level (depends on endpoint speed)
+
+**Results Interpretation (Qualitative Framework)**:  
+- **TTFT**: "Lower is better for perceived responsiveness" - impacts how quickly content starts appearing  
+- **ITL**: "Lower improves streaming quality" - smoother reading experience  
+- **Goodput**: "Higher indicates better throughput efficiency" - balances speed and error rate  
+- **Request Completion Rate**: "Higher indicates better reliability" - % of successful generations  
+
+### 5.4 Conversational Chat Scenario  
+**Business Use Cases**:  
+- Customer service chatbots  
+- Virtual assistants  
+- Interactive tutoring systems  
+- Therapeutic or support agents  
+
+**Technical Configuration**:  
+- Multi-turn conversations with realistic think-time simulation  
+- Input: Conversation history (~150 tokens/turn)  
+- Output: Responses (~200 tokens/turn)  
+- Turn delay simulation (~3.5s ± 0.75s) mimicking human typing time  
+- Dataset: `conversational_chat.jsonl` with real dialogue samples  
+
+**Execution**:  
+```bash
+# Same environment setup as content generation
+# Additional parameter for turn delays:
+--conversation-turn-delay-mean 3500 \
+--conversation-turn-delay-stddev 750
+```
+
+**Duration Expectation**: 25-50 minutes per concurrency level (longer due to turn delays)
+
+**Results Interpretation**:  
+- TTFT: "Lower improves perceived responsiveness of first reply"  
+- ITL: "Lower improves streaming conversation flow"  
+- Turn Completion Latency: "End-to-end exchange time matters"  
+- Conversation Success Rate: Measures multi-turn interaction stability  
+- Context Handling: Qualitative assessment of coherent follow-ups  
+
+### 5.5 RAG / Long-Context Scenario  
+**Business Use Cases**:  
+- Document analysis for research/legal/financial teams  
+- Technical support knowledge base retrieval  
+- Customer support ticket classification  
+- Large-context summarization tasks  
+
+**Technical Configuration**:  
+- Large fixed input (4,000 tokens): SOURCE DOCUMENTS or context passages  
+- Moderate output (250 tokens): Answers/summaries/extractions  
+- Single-turn interaction (or multi-turn with context window limits)  
+- Streaming enabled for generating multiple tokens from long context  
+- Dataset: `rag_long_context.jsonl` with real document samples  
+
+**Execution**:  
+```bash
+# Similar setup to content generation, but with different script
+kubectl apply -f model-selection/k8s/rag_long_context-job.yaml
+```
+
+**Duration Expectation**: 30-60 minutes per concurrency level (often longest due to context processing complexity)
+
+**Results Interpretation**:  
+TTFT: "Lower indicates faster initial context processing"  
+ITL: "Lower improves answer delivery smoothness"  
+Context Utilization Effectiveness: "Higher suggests better use of provided information" (qualitative)  
+Request Completion Rate: "Higher indicates reliable complex query handling"  
+- Qualitative note: Evaluate whether responses actually use relevant context points  
+
+### 5.6 Common Configuration Parameters  
+**Required Parameters** (must be set for all tests):  
+- `MODEL`: Target model identifier/name  
+- `URL`: LLM endpoint base URL (e.g., `http://localhost:8000`)  
+- `ENDPOINT_TYPE`: Usually "openai" for OpenAI-compatible APIs  
+- `ENDPOINT_PATH`: Typically `/v1/chat/completions`  
+
+**Optional Parameters** (safe defaults):  
+- `CONCURRENCY`: Default `1`, set to `5/10/25` for load testing  
+- `TOKENIZER_PATH`: For local tokenizers (defaults to HF auto-resolution)  
+- `HF_TOKEN`: For private/gated model tokenizers  
+- `OUTPUT_DIR`: Default `./artifacts` (change to store elsewhere)  
+
+**Configuration Methods**:  
+- **Recommended**: Environment variables (no script changes needed)  
+- **Alternative**: Direct script modification for permanent baseline changes  
+- **Best Practice**: Create wrapper scripts for specific test suites  
+
+### 5.7 Multi-Model Comparison Workflow  
+**Primary Use Case**: Selecting optimal model from candidates based on performance  
+**Recommended Process** (assuming round-robin testing):  
+1. Define model candidates (2-4 models for meaningful comparison)  
+2. Prepare identical test environment (same cluster, time of day, network conditions)  
+3. For each concurrency level [1, 5, 10, 25]:  
+   a. Test Model A at current concurrency  
+   b. Test Model B at current concurrency  
+   c. Test Model C at current concurrency (if applicable)  
+   d. [Optional] Re-test reference model to check for drift  
+4. Collect and normalize results for comparison  
+- **Comparison Framework**:  
+  - Create tables showing metrics side-by-side across models/concern levels  
+  - Use radar/spider charts for multi-metric comparison  
+  - Apply weighting based on business priorities (latency vs. throughput vs. quality)  
+  - Identify Pareto-optimal models (no worse on any metric, better on at least one)  
+- **Decision Guidance**:  
+  - Latency-sensitive apps: Prioritize low TTFT/ITL  
+  - Throughput-focused apps: Prioritize high goodput/request rate  
+  - Quality-sensitive apps: May accept higher latency for better output fidelity  
+  - Document rationale for selection to support future re-evaluation  
+
+### 5.8 Troubleshooting Model Selection Tests  
+**Scenario-Specific Issues**:  
+- Content Generation: Output truncation → Check `OUTPUT_TOKENS_MEAN` setting  
+- Conversational Chat: Context drift in prolonged dialogues → May indicate context window limits  
+- RAG: Irrelevant answers → May indicate retrieval or context window issues  
+- Configuration Issues:  
+  - Connection errors → Verify endpoint URL, network access, firewall rules  
+  - Authentication failures → Check API key/token validity and format  
+  - Dataset not found → Verify `INPUT_FILE` path or correct branch  
+  - Tokenizer errors → Validate `TOKENIZER_PATH` or use HF auto-resolution  
+- Resource Constraints:  
+  - GPU memory exhaustion → Check actual vs. reported model size  
+  - Rate limiting → Reduce concurrency or add delays between batches  
+- Validation Steps:  
+  - Confirm input/output token counts match expectations  
+  - Spot-check responses for basic coherence (not quality assessment)  
+  - Verify no unexpected errors in job logs  
+  - Check warm-up vs. actual request counts in logs  
+
+### 5.9 Summary of Findings  
+- The testing framework enables data-driven model selection through standardized, reproducible evaluations  
+- Business value comes from quantifying performance across UX-relevant metrics rather than subjective impressions  
+- Results should inform both model choice and infrastructure requirements for production deployment  
+- All three implemented scenarios contribute distinct insights: content generation for output quality, chat for multi-turn fluency, RAG for context handling  
+- **Note**: This section focuses on operational testing; output quality validation requires separate human evaluation filters
+
 *[Content to be finalized - see revision plan for detailed structure]*
 
 ---

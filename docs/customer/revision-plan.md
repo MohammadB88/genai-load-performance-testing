@@ -22,7 +22,7 @@
 | 2 | Technical Overview | ✓ Approved |
 | 3 | Prerequisites & Environment Setup | ✓ Approved |
 | 4 | Quick Start Guide | ✓ Approved |
-| 5 | Running Model Selection Tests | 📋 Planned |
+| 5 | Running Model Selection Tests | ✓ Approved |
 | 6 | Understanding Results | ❌ Not yet started |
 | 7 | Troubleshooting & FAQ | ❌ Not yet started |
 | 8 | Technical Reference | ❌ Not yet started |
