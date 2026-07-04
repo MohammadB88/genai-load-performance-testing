@@ -50,6 +50,13 @@
   - [6.8 Using Results for Next Steps](#68-using-results-for-next-steps)
 - [7. Troubleshooting & FAQ](#7-troubleshooting--faq)
 - [8. Technical Reference](#8-technical-reference)
+  - [8.1 AIPerf CLI Flags Reference](#81-aiperf-cli-flags-reference)
+  - [8.2 Environment Variable Reference](#82-environment-variable-reference)
+  - [8.3 JSONL Prompt Schema Reference](#83-jsonl-prompt-schema-reference)
+  - [8.4 Directory Structure Reference](#84-directory-structure-reference)
+  - [8.5 Kubernetes Resource Reference](#85-kubernetes-resource-reference)
+  - [8.6 Metrics Calculation Reference](#86-metrics-calculation-reference)
+  - [8.7 Git Workflow for Reproducibility](#87-git-workflow-for-reproducibility)
 
 ---
 
@@ -1004,4 +1011,178 @@ A: Run at `CONCURRENCY=1` with `WARMUP_REQUESTS=0` (or the default 10). A single
 
 ## 8. Technical Reference
 
-*[Content to be developed]*
+### 8.1 AIPerf CLI Flags Reference
+
+All flags used across the three implemented scenarios. Flags marked with `†` are shared across all scenarios; scenario-specific flags are noted.
+
+| Flag | Type | Used In | Description |
+|------|------|---------|-------------|
+| `--model` † | string | All | Model identifier passed to the endpoint in the chat completion request body |
+| `--url` † | string | All | Base URL of the OpenAI-compatible LLM endpoint |
+| `--endpoint-type` † | string | All | API protocol — always `chat` for OpenAI-compatible endpoints |
+| `--endpoint` † | string | All | API path — typically `/v1/chat/completions` |
+| `--streaming` † | flag | All | Enable token-by-token streaming response (required for TTFT/ITL measurement) |
+| `--input-file` † | string | All | Path to the JSONL prompt file |
+| `--custom-dataset-type` † | string | All | Dataset schema: `mooncake_trace` (single-turn, keyed on `text_input`) or `multi_turn` (conversational) |
+| `--output-tokens-mean` † | int | All | Target mean output tokens per request |
+| `--concurrency` † | int | All | Number of concurrent simulated users (1 for baseline, sweep 5/10/25) |
+| `--warmup-request-count` | int | All | Number of non-measured requests to warm up the endpoint before recording metrics |
+| `--random-seed` | int | All | PRNG seed for reproducibility of stochastic test elements |
+| `--artifact-dir` † | string | All | Output directory for CSV/JSON result files |
+| `--tokenizer` | string | All | Tokenizer: local directory path or HuggingFace repo ID (optional — defaults to model name) |
+| `--tokenizer-trust-remote-code` | flag | All | Allow executing tokenizer code from the HF repo (opt-in, see [Section 7.2](#72-test-execution)) |
+| `--output-tokens-stddev` | int | Conversational Chat | Standard deviation for output token length (200±50) |
+| `--conversation-turn-delay-mean` | int (ms) | Conversational Chat | Mean delay between conversation turns (3500ms = 3.5s human think-time) |
+| `--conversation-turn-delay-stddev` | int (ms) | Conversational Chat | Stddev for turn delay (750ms, targeting 2-5s window) |
+
+For the full AIPerf CLI reference (all available flags), run `aiperf profile --help` or consult the [NVIDIA AIPerf documentation](https://docs.nvidia.com/aiperf/).
+
+### 8.2 Environment Variable Reference
+
+All environment variables recognized by the scenario scripts. These can be set before invocation or provided interactively (the script falls back to prompting if not set).
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `MODEL` | ✓ | — | Target model identifier/name |
+| `URL` | ✓ | — | LLM endpoint base URL |
+| `ENDPOINT_TYPE` | | `chat` | API protocol |
+| `ENDPOINT_PATH` | | `/v1/chat/completions` | API path |
+| `CONCURRENCY` | | `1` | Concurrent simulated users |
+| `INPUT_FILE` | | `<script-dir>/prompts/<scenario>.jsonl` | Path to prompt JSONL file |
+| `CUSTOM_DATASET_TYPE` | | `mooncake_trace` or `multi_turn` | JSONL schema type |
+| `OUTPUT_TOKENS_MEAN` | | per-scenario (800/200/250) | Target mean output tokens |
+| `OUTPUT_TOKENS_STDDEV` | | varies | Output token stddev (conversational chat only) |
+| `CONVERSATION_TURN_DELAY_MEAN_MS` | | `3500` | Turn delay mean in ms (conversational chat only) |
+| `CONVERSATION_TURN_DELAY_STDDEV_MS` | | `750` | Turn delay stddev in ms (conversational chat only) |
+| `WARMUP_REQUESTS` | | `10` | Warmup request count |
+| `RANDOM_SEED` | | `42` | PRNG seed |
+| `OUTPUT_DIR` | | `./artifacts` | Results output directory |
+| `TOKENIZER_PATH` | | (none) | Tokenizer: local dir or HF repo ID |
+| `TOKENIZER_TRUST_REMOTE_CODE` | | `0` | Set to `1` to enable remote tokenizer code execution |
+| `HF_TOKEN` | | (none) | HuggingFace token for gated/private model tokenizers |
+| `HF_HOME` | | (image default) | Override HuggingFace cache directory (fixes permission errors) |
+
+### 8.3 JSONL Prompt Schema Reference
+
+Each scenario uses a JSONL (JSON Lines) file where each line is a single JSON record. The field names and structure depend on the `--custom-dataset-type`.
+
+**MooncakeTrace schema** (used by `content_generation` and `rag_long_context`):
+
+```jsonl
+{"text_input": "Write a 500-word blog post about sustainable technology trends..."}
+{"text_input": "Create a product description for an AI-powered customer service chatbot..."}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `text_input` | string | ✓ | The prompt text sent as the user message to the chat endpoint |
+
+Each record is replayed exactly once, in file order. This is the confirmed-working schema for single-turn scenarios.
+
+**MultiTurn schema** (used by `conversational_chat` — known schema issue, see [Section 7.4](#74-known-issues--limitations)):
+
+```jsonl
+{"text_input": [{"role": "user", "content": "Hello, I need help..."}, {"role": "assistant", "content": "I'd be happy to help..."}, {"role": "user", "content": "My account was charged twice..."}]}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `text_input` | array | ✓ | Array of message objects, each with `role` and `content` keys |
+
+The exact schema expected by the installed AIPerf version may differ — the `multi_turn` dataset type is not yet confirmed working. See `docs/scenarios/model-selection.md` for current status.
+
+### 8.4 Directory Structure Reference
+
+```
+genai-load-performance-testing/
+├── docs/
+│   ├── customer/
+│   │   └── performance-guide.md          # This document
+│   ├── scenarios/
+│   │   ├── model-selection.md            # Scenario matrix & definitions
+│   │   └── sizing.md                     # Sizing suite definitions
+│   └── metrics/
+│       ├── model-selection.md            # Model selection metrics table
+│       └── sizing.md                     # Sizing metrics table
+├── model-selection/
+│   ├── scripts/
+│   │   ├── run_content_generation.sh     # Content generation scenario script
+│   │   ├── run_conversational_chat.sh    # Conversational chat scenario script
+│   │   └── run_rag_long_context.sh       # RAG / long-context scenario script
+│   ├── prompts/
+│   │   ├── content_generation.jsonl      # 20 single-turn marketing prompts
+│   │   ├── conversational_chat.jsonl     # 20 multi-turn chat sessions
+│   │   └── rag_long_context.jsonl        # 18 long-context Q&A prompts
+│   ├── k8s/
+│   │   ├── run-test.sh                   # End-to-end orchestration script
+│   │   ├── generate-configmaps.sh        # ConfigMap generator
+│   │   ├── content-generation-job.yaml   # K8s Job manifest
+│   │   ├── conversational-chat-job.yaml  # K8s Job manifest
+│   │   ├── rag-long-context-job.yaml     # K8s Job manifest
+│   │   └── results-pvc.yaml              # Shared results PVC (20Gi)
+│   └── results/                          # ❌ Not yet created — commit output here
+├── sizing/                               # ❌ Not yet implemented
+├── CLAUDE.md                             # AI assistant context
+└── README.md                             # Project overview
+```
+
+### 8.5 Kubernetes Resource Reference
+
+Each test run in the `model-selection/k8s/` suite creates or uses the following resources in the target namespace:
+
+| Resource Type | Name | Purpose | Created By |
+|---------------|------|---------|------------|
+| Namespace | `aiperf` (default) | Isolated environment for test execution | `run-test.sh` |
+| Secret | `aiperf-credentials` | API key and endpoint URL for LLM access | Customer (manual) |
+| Secret | `aiperf-hf-token` | HuggingFace token for gated model tokenizers (optional) | `run-test.sh` |
+| ConfigMap | `aiperf-<scenario>-script` | Scenario bash script mounted into the Job container | `generate-configmaps.sh` |
+| ConfigMap | `aiperf-<scenario>-prompts` | Prompt JSONL file mounted into the Job container | `generate-configmaps.sh` |
+| PersistentVolumeClaim | `aiperf-model-selection-results` | Shared 20Gi volume for test result artifacts | `run-test.sh` (via `results-pvc.yaml`) |
+| Job | `aiperf-<scenario>` | Runs the AIPerf test as a batch workload | `run-test.sh` (via Job YAML) |
+| Pod | `aiperf-<scenario>-<hash>` | Created by the Job — executes the test | K8s scheduler (automatic) |
+
+**Job template parameters to customize** (in each `*-job.yaml`):
+- `image:` — AIPerf container image tag (default: `nvcr.io/nvidia/ai-dynamo/aiperf:0.10.0` — update as needed)
+- `resources.limits/requests` — CPU/memory per job pod (default: 2 CPU, 4GB RAM)
+- `storageClassName` in `results-pvc.yaml` — set to your cluster's storage class
+
+### 8.6 Metrics Calculation Reference
+
+AIPerf records per-request telemetry in CSV format and computes aggregate statistics. Below is how each key metric is derived.
+
+| Metric | Unit | Calculation | Source |
+|--------|------|-------------|--------|
+| **TTFT** (Time to First Token) | ms | Time from request send to receipt of first response token | Per-request CSV column |
+| **TTST** (Time to Second Token) | ms | Time from first to second token (helps distinguish prompt processing from scheduling overhead) | Derived from first two token timestamps |
+| **ITL** (Inter-Token Latency) | ms | Average time between consecutive tokens after the first token | Per-request CSV column |
+| **End-to-End Latency** | ms | Total time from request to final token (or full response for non-streaming) | Per-request CSV column |
+| **Output Token Throughput (per user)** | tok/s | `(total_output_tokens - 1) / (end_to_end_latency - ttft)` | Derived from per-request metrics |
+| **System Output Token Throughput** | tok/s | Sum of all per-user throughputs at a given concurrency level | Aggregate across requests |
+| **Goodput** | % | Percentage of requests where TTFT, ITL, and total latency all fall within configured SLA targets | Aggregate metric |
+| **Success / Error Rate** | % | Percentage of requests completed without HTTP or streaming errors | Aggregate metric |
+| **Request Throughput** | req/s | Total completed requests divided by test duration | Aggregate metric |
+
+For the exact metric definitions, column names, and output format, see `docs/metrics/model-selection.md` and the AIPerf documentation.
+
+### 8.7 Git Workflow for Reproducibility
+
+The project uses Git as the single source of truth for both configuration and results, ensuring every test run is traceable back to a specific commit and AIPerf version.
+
+**Commit structure:**
+
+```
+<scenario>/results/<model>/<concurrency>/     # Raw AIPerf export (CSV + JSON)
+├── results_*.csv                              # Per-request metrics
+├── summary_*.json                             # Aggregated metrics
+├── configuration_*.json                       # Full test parameters
+└── aiperf-version.txt                         # Pinned AIPerf version
+```
+
+**Best practices:**
+1. **Pin the AIPerf version** — record `aiperf --version` output in each results directory or commit message.
+2. **Commit scripts and results together** — a commit should contain both the scenario script version *and* the output it produced.
+3. **Descriptive commit messages** — include model name, concurrency level, date, and any environmental notes (e.g., "llama-3-70b, concurrency=10, cluster with 4xA100, 2026-07-04").
+4. **Tag significant milestones** — use Git tags for baseline results (e.g., `v1-baseline-llama3-70b`).
+5. **No generated files in untracked changes** — the `.gitignore` excludes the `sample-script.sh` scratch file and any local artifacts outside the `results/` directory tree.
+
+This approach ensures that any stakeholder can reproduce a given result by checking out the corresponding commit and re-running the script with the same AIPerf version.
