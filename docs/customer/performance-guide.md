@@ -821,7 +821,184 @@ Request Completion Rate: "Higher indicates reliable complex query handling"
 
 ## 7. Troubleshooting & FAQ
 
-*[Content to be developed]*
+This section covers common issues encountered when running the model selection test suite, organized by where in the workflow the problem appears. For basic environment setup issues (API connectivity, missing scripts, image pulls, PVC binding) see [Section 3.6](#36-common-issues--troubleshooting). For scenario-specific configuration problems see [Section 5.8](#58-troubleshooting-model-selection-tests).
+
+### 7.1 Setup & Environment
+
+**Q: My pod is stuck in "Pending" — what do I check?**
+
+A: A pending pod almost always means insufficient cluster resources or a missing PVC. Run:
+```bash
+kubectl describe pod <pod-name>
+kubectl get pvc
+kubectl describe nodes
+```
+Common causes: PVC not bound (check storage class name matches your cluster), node CPU/memory exhaustion (reduce resource requests or add nodes), or a taint that tolerates no pods. See [Section 3.6](#36-common-issues--troubleshooting) for PVC troubleshooting.
+
+**Q: The pod starts but immediately crashes with "Permission denied" on cache directories.**
+
+A: The AIPerf container image's default `HF_HOME` (e.g., `/app/.cache/huggingface`) is not writable by non-root users. Set `HF_HOME` to a writable path:
+```bash
+export HF_HOME=/tmp/hf-cache
+```
+The scenario scripts support this via the `HF_HOME` environment variable. The script will create the directory if it doesn't exist.
+
+**Q: I get "ImagePullBackOff" or "ErrImagePull" on the AIPerf container image.**
+
+A: This means the cluster cannot pull the image from NGC or your private registry. Check:
+- The image tag in the Job YAML matches a real published tag (see `nvcr.io/nvidia/ai-dynamo/aiperf:0.10.0` — you may need to update this).
+- Your cluster has pull credentials for NGC (`nvcr.io`) or your private registry.
+- Your cluster has network egress to the container registry (corporate proxies/firewalls can block this).
+
+**Q: I can't reach my LLM endpoint from the cluster — connection timeouts.**
+
+A: Follow the connectivity verification steps in [Section 3.5](#35-quick-environment-verification). The most common causes are:
+- Network policies blocking egress to the endpoint's IP/port.
+- The endpoint listening on `localhost` only (must be reachable from outside the host).
+- TLS certificate issues with self-signed certs (test with `curl -k` first).
+- DNS resolution failure inside the cluster (test with `kubectl run dns-test --image=busybox -- nslookup your-endpoint-host`).
+
+### 7.2 Test Execution
+
+**Q: The test runs but produces empty output or zero valid requests.**
+
+A: Check the pod logs with `kubectl logs <pod-name>`. Likely causes:
+- The endpoint returned all errors (check `HTTP 4xx/5xx` in logs — verify API key, endpoint URL, model name).
+- No requests were sent because the input file wasn't found (the script exits early if the file is missing, but a K8s ConfigMap mount path may differ — verify paths with `kubectl exec <pod> -- ls -la /path/to/prompts/`).
+- The `--streaming` flag is set but the endpoint doesn't support streaming (switch to non-streaming or use a compatible endpoint).
+
+**Q: AIPerf fails with "Failed to load tokenizer" and suggests --tokenizer-trust-remote-code.**
+
+A: Some HuggingFace repos (custom fine-tunes, quantized models, GGUF conversions) use a non-standard `tokenizer_config.json` that requires executing Python code from the repo. Set:
+```bash
+export TOKENIZER_TRUST_REMOTE_CODE=1
+```
+**Security note**: this executes arbitrary code from the HF repo — review the tokenizer implementation on HuggingFace before enabling.
+
+**Q: I get a tokenizer error about a gated/private model (e.g., meta-llama/Llama-*).**
+
+A: Gated model repos require a HuggingFace token with granted access. Either:
+- Set `HF_TOKEN=hf_your_token` in the environment (the script will detect it), or
+- Let the script prompt you for the token interactively.
+For local tokenizer directories, the script sets `HF_HUB_OFFLINE=1` so no token is needed.
+
+**Q: The conversational chat scenario fails with a Pydantic validation error about "turn_delay" or "extra_forbidden".**
+
+A: This is a known, unresolved issue. The `multi_turn` dataset schema used by `run_conversational_chat.sh` differs from what the installed AIPerf version expects — AIPerf's Pydantic model rejects fields it doesn't recognize. The exact schema has not been confirmed. See [docs/scenarios/model-selection.md](../scenarios/model-selection.md) for details and current status. The `content_generation` and `rag_long_context` scenarios (which use `mooncake_trace`) do not have this issue.
+
+**Q: AIPerf rejects my dataset with "At least one modality must be provided" or expects a 'text' key.**
+
+A: You're using `--custom-dataset-type random_pool` with a dataset keyed on `text_input`. The `random_pool` schema requires a `text` key (or `texts`, `image`, etc.). This was resolved by switching to `mooncake_trace`, which uses `text_input` and is the correct choice for deterministic single-turn replay. Update your invocation to:
+```
+--custom-dataset-type mooncake_trace
+```
+and ensure your JSONL records use the `text_input` key. See `run_rag_long_context.sh` for the confirmed-working pattern.
+
+**Q: The test seems to hang or takes much longer than the estimated duration.**
+
+A: Several factors can extend test time:
+- **Slow endpoint**: if the underlying LLM is heavily loaded, each request takes longer → reduce concurrency or increase timeout.
+- **Large output sequences**: `--output-tokens-mean 800` on a slow endpoint can take minutes per request.
+- **Think-time accumulation**: conversational scenarios with 3-5 turns at 2-5s delay per turn add 6-25s per conversation before network time.
+- **Rate limiting**: the endpoint may be throttling requests, causing AIPerf to back off and retry. Lower concurrency or add delays.
+- Check `kubectl logs` for progress messages — AIPerf prints periodic status.
+
+**Q: I see "429 Too Many Requests" or rate-limiting errors in the logs.**
+
+A: Your LLM endpoint is throttling the test traffic. Mitigations:
+- Reduce concurrency (`CONCURRENCY=1` to start).
+- Increase `--warmup-request-count` to let the endpoint adjust.
+- Add delays between requests (not currently supported by these scripts — as a workaround, reduce concurrency).
+- Check your API plan/quotas with the endpoint provider.
+
+### 7.3 Results & Metrics
+
+**Q: My TTFT numbers are very high — is the endpoint slow or is something wrong?**
+
+A: High TTFT can indicate:
+- Endpoint prefill/processing overhead (expected for large ISL — 4k+ tokens will have higher TTFT).
+- Request queueing at high concurrency (check TTFT variance across requests).
+- Network latency between cluster and endpoint (run from same region/cloud if possible).
+- Cold start / model loading (first request after idle period is slower — AIPerf's warmup requests mitigate this).
+Compare your values against the endpoint's advertised performance or run a quick single-request baseline with `curl` to isolate network + endpoint latency.
+
+**Q: Goodput is 0% — what does that mean?**
+
+A: Goodput measures the percentage of requests that meet *all* latency targets (TTFT, ITL, total latency) simultaneously. 0% means no request met every target. This is common when:
+- TTFT or ITL targets are set too aggressively (the default targets in AIPerf may be tuned for fast endpoints).
+- Concurrency is too high for your endpoint (latency spikes push requests past the targets).
+- The endpoint has high variance — some fast requests, many slow ones.
+Check which specific latency target is being missed by examining the per-request metrics in the CSV output.
+
+**Q: Output token counts in the results don't match my --output-tokens-mean setting.**
+
+A: `--output-tokens-mean` is a *target* — the model generates until it decides to stop (an EOS token or reaching the model's max-tokens limit). Actual output lengths will vary around the mean. The standard deviation (`--output-tokens-stddev`, default varies by scenario) controls how tightly AIPerf enforces the target via truncation/padding. If counts are wildly different (e.g., 50 vs 800), verify the endpoint respects the `max_tokens` parameter in the chat completion request.
+
+**Q: Why do results vary between two runs of the same test?**
+
+A: Some variance is normal — LLM serving systems are not perfectly deterministic. Common sources of variation:
+- **GPU sharing**: if other workloads use the same GPU, performance changes.
+- **Network conditions**: cross-region calls see higher variance than same-region.
+- **Endpoint load**: public endpoints have background traffic you can't control.
+- **KV cache state**: after warmup, cache-hit rates may differ.
+To minimize variance: run tests at the same time of day, on an idle cluster, and always include warmup requests. For critical comparisons, run each configuration 2-3 times and report median or P95 values.
+
+**Q: Some requests in the output have HTTP error statuses — are they counted in the metrics?**
+
+A: Yes and no. AIPerf typically records all attempts, including failures, in the raw CSV output. Failed requests are excluded from latency percentiles (TTFT, ITL) but the error count is reported separately. Always check the error rate / success rate metric before interpreting latency numbers — if >5% of requests failed, the latency metrics only describe the surviving requests, which may be misleadingly good. See [Section 6.7](#67-validating-result-quality) for validation guidance.
+
+### 7.4 Known Issues & Limitations
+
+| Issue | Status | Workaround |
+|-------|--------|------------|
+| **Conversational Chat multi_turn schema** — AIPerf rejects `turn_delay` field in multi-turn JSONL with a Pydantic validation error. | Unresolved. The exact `multi_turn` schema for the installed AIPerf version has not been confirmed. | Use `content_generation` or `rag_long_context` (which use `mooncake_trace`) until resolved. See [docs/scenarios/model-selection.md](../scenarios/model-selection.md) for status updates. |
+| **RandomPool dataset rejection** — `--custom-dataset-type random_pool` fails with "At least one modality must be provided" when using `text_input` keys. | Resolved — switch to `mooncake_trace`. | Use `--custom-dataset-type mooncake_trace` and key your JSONL on `text_input`. All single-turn scenarios use this confirmed-working pattern. |
+| **Tokenizer trust_remote_code** — some HF repos (quantized/custom tokenizers) require executing arbitrary tokenizer code. | By design, requires opt-in. | Set `TOKENIZER_TRUST_REMOTE_CODE=1` after reviewing the repo's tokenizer code. |
+| **HF_HOME permission error** — default cache dir in the NGC container image is not writable by non-root users. | Workaround documented. | Set `HF_HOME=/tmp/hf-cache` (or any writable path) in the environment. |
+| **Gated model tokenizers** — private HF repos (e.g., meta-llama/*) require authentication. | By design. | Set `HF_TOKEN` environment variable or let the script prompt for it. |
+| **Missing scenarios** — only 3 of 6 V1 model selection scenarios are implemented. Summarization, Agentic/Tool-Calling, and Batch/Non-Interactive are not yet built. | Planned for future release. | Not applicable — no workaround available. |
+| **Sizing suite** — the capacity/infrastructure sizing suite is not yet implemented. | Planned for future release. | The concurrency ladder in the model-selection suite provides a rough upper bound; see [Section 6.6](#66-preliminary-infrastructure-insights-placeholder). |
+
+### 7.5 General FAQ
+
+**Q: Can I add a new scenario?**
+
+A: Yes — each scenario is a single bash script containing an `aiperf profile` invocation. To add a new one:
+1. Create a new script in `model-selection/scripts/` (copy an existing one as a template).
+2. Create a corresponding prompt file in `model-selection/prompts/`.
+3. Create a K8s Job manifest in `model-selection/k8s/`.
+4. Register it in `model-selection/k8s/run-test.sh` in the `ALL_TESTS` array.
+5. Regenerate ConfigMaps with `generate-configmaps.sh`.
+See the existing scenarios for reference patterns.
+
+**Q: Can I run these tests outside Kubernetes (e.g., from my laptop or a VM)?**
+
+A: The scripts themselves are plain bash and can run anywhere with the `aiperf` binary installed (the scripts' only external dependency). Running natively (no Docker/K8s) is planned as the "jumphost fallback" mode but is not yet implemented. Currently, the K8s delivery path is the primary and tested method.
+
+**Q: What if my endpoint is OpenAI / Azure OpenAI / Together AI / Anthropic / etc.?**
+
+A: As long as your endpoint exposes an OpenAI-compatible chat completions API (`/v1/chat/completions`), it will work. Set:
+- `ENDPOINT_TYPE=chat`
+- `ENDPOINT_PATH=/v1/chat/completions`
+- `URL` to your endpoint's base URL
+- `MODEL` to the deployment/model name
+Some providers may require additional headers (e.g., `api-key` vs `Authorization: Bearer`) — AIPerf maps standard OpenAI auth automatically via `--api-key` or the `API_KEY` environment variable.
+
+**Q: Can I run multiple scenarios or concurrency levels simultaneously?**
+
+A: Not recommended — concurrent test jobs compete for endpoint capacity and cluster resources, producing confounded results. Run scenarios and concurrency levels sequentially. The `run-test.sh` script submits jobs that run in parallel on the cluster but serialize their requests to the endpoint — check your endpoint's behavior under concurrent load before relying on this.
+
+**Q: How do I share my results with the consulting team?**
+
+A: Commit the raw AIPerf export (CSV/JSON files) to the repository in the appropriate scenario directory under `model-selection/` or `sizing/` (once created). Tag the commit with the date and configuration tested. The repository is the single source of truth for reproducibility. See [Section 2.3](#23-key-technical-concepts) for the reproducibility commitment.
+
+**Q: Where should I commit test results?**
+
+A: Create a directory structure under the relevant suite — for example, `model-selection/results/<model-name>/<scenario>/<concurrency>/`. Each run's full AIPerf export directory should be committed along with a note of the AIPerf version used. This ensures the results are reproducible and traceable back to specific code and configuration.
+
+**Q: What's the fastest way to validate a configuration is working before running a full sweep?**
+
+A: Run at `CONCURRENCY=1` with `WARMUP_REQUESTS=0` (or the default 10). A single successful completion at baseline concurrency confirms the pipeline works. Then increase concurrency and warmup for the real test.
 
 ---
 
