@@ -339,7 +339,199 @@ kubectl run image-test --image=your-registry.com/aiperf:latest --rm -it --restar
 
 ## 4. Quick Start Guide
 
-*[Content to be finalized - see revision plan for approved structure]*
+### 4.1 Before You Begin
+
+**Prerequisites Checklist:**
+- ✅ Completed Section 3: Prerequisites & Environment Setup
+- ✅ Kubernetes cluster accessible with `kubectl`
+- ✅ Network connectivity to your LLM endpoint confirmed
+- ✅ Container image pull access verified (NGC or private registry)
+- ✅ Default namespace `aiperf` created
+
+**What You'll Accomplish:**
+- Configure and run a simplified content generation test
+- Access and understand test results
+- See the testing workflow end-to-end
+
+**Estimated Time:** 30-60 minutes for the complete quick start
+
+### 4.2 Scenario Selection: Content Generation
+
+We'll use the `content_generation` scenario for your quick start because it:
+- Demonstrates all key metrics (TTFT, ITL, goodput)
+- Is single-turn (simpler to understand)
+- Has clear business relevance (generating marketing content, articles, etc.)
+- Runs quickly compared to multi-turn scenarios
+
+**Note**: This quick start uses default parameters. Later, you'll customize with specific features for your actual content generation testing (custom prompts, output length requirements, etc.).
+
+### 4.3 Configuration
+
+#### Step 1: Set Up API Credentials
+
+Create a Kubernetes Secret with your LLM endpoint credentials:
+
+```bash
+# Create secret with your API key
+kubectl create secret generic aiperf-credentials \
+  --from-literal=api-key='your-api-key-here' \
+  --from-literal=endpoint-url='https://your-llm-endpoint.com:8000' \
+  --from-literal=model-name='your-model-name'
+
+# Verify secret creation (should show: secret/aiperf-credentials created)
+kubectl get secret aiperf-credentials
+```
+
+**Success Indicator**: You should see `secret/aiperf-credentials created` and `kubectl get secret aiperf-credentials` should list your secret.
+
+#### Step 2: Verify Test Scripts
+
+Ensure the content generation scenario scripts exist:
+
+```bash
+# List available scenario scripts
+ls model-selection/
+
+# Verify content generation script exists
+ls model-selection/run_content_generation.sh
+
+# Verify prompts exist
+ls model-selection/prompts/content_generation.jsonl
+```
+
+**Success Indicator**: You should see `run_content_generation.sh` and `content_generation.jsonl` in the listings.
+
+### 4.4 Running Your First Test
+
+#### Step 1: Execute the Quick Start Job
+
+For this quick start, we'll run a simplified version of the content generation test:
+
+```bash
+# Run the content generation scenario with default parameters
+kubectl apply -f model-selection/k8s/content-generation-job.yaml
+
+# Monitor job startup
+kubectl get pods -l job-name=content-generation-test
+```
+
+**Success Indicator**: You should see a pod with status `Running` or `Completed` after 30-60 seconds.
+
+#### Step 2: Monitor Test Progress
+
+Watch the job execution:
+
+```bash
+# View job status
+kubectl get job content-generation-test
+
+# View pod logs to see test progress
+kubectl logs -f job/content-generation-test
+```
+
+**What to Expect in Logs:**
+- AIPerf initialization messages
+- Test configuration summary
+- Progress indicators (requests completed, metrics collected)
+- Final results summary
+
+**Success Indicator**: Job status should show `COMPLETED` and logs should show "Test completed successfully" after 5-15 minutes (depending on your endpoint performance).
+
+### 4.5 Understanding Sample Prompts
+
+The content generation scenario uses realistic prompts that mirror business use cases. Here are 5 sample prompts you'll find in `model-selection/prompts/content_generation.jsonl`:
+
+```
+{"prompt": "Write a 500-word blog post about sustainable technology trends for 2024, focusing on renewable energy innovations."}
+
+{"prompt": "Create a product description for an AI-powered customer service chatbot, highlighting key features and benefits for small businesses."}
+
+{"prompt": "Draft a marketing email announcing a new cloud infrastructure service, targeting CTOs and IT directors at mid-sized companies."}
+
+{"prompt": "Write a technical whitepaper abstract about machine learning model optimization techniques for edge computing devices."}
+
+{"prompt": "Generate a social media campaign plan for a B2B SaaS product launch, including content calendar and platform strategy."}
+```
+
+**Note**: These prompts test the model's ability to generate high-quality, business-relevant content from brief inputs. Your actual tests may use custom prompts specific to your use cases.
+
+### 4.6 Viewing Results
+
+#### Step 1: Access Test Results
+
+Results are stored in the persistent volume attached to the test pod:
+
+```bash
+# Find the completed pod
+POD_NAME=$(kubectl get pods -l job-name=content-generation-test -o jsonpath='{.items[0].metadata.name}')
+
+# Copy results from the pod
+kubectl cp $POD_NAME:/results ./quick-start-results --container=aiperf
+
+# List downloaded results
+ls quick-start-results/
+```
+
+**Success Indicator**: You should see CSV and JSON files in the `./quick-start-results/` directory.
+
+#### Step 2: Understand Result Structure
+
+Typical output files include:
+- `results_*.csv`: Raw performance metrics (detailed, per-request data)
+- `summary_*.json`: Aggregated metrics and test configuration
+- `configuration_*.json`: Complete test parameters for reproducibility
+
+**Key Files to Examine:**
+```bash
+# View the summary file
+cat quick-start-results/summary_*.json
+
+# View a sample of the detailed results
+head -n 20 quick-start-results/results_*.csv
+```
+
+### 4.7 Key Metrics to Look For
+
+In your results, focus on these critical metrics (actual values will appear after your test runs):
+
+**Time to First Token (TTFT)**
+- What it measures: Time from request to first token generation
+- Why it matters: User-perceived responsiveness
+- Good range: < 1 second for interactive use cases
+
+**Inter-Token Latency (ITL)**  
+- What it measures: Average time between consecutive tokens
+- Why it matters: Streaming quality and user experience
+- Good range: < 100ms for smooth streaming
+
+**Goodput**
+- What it measures: Effective tokens per second considering all latencies
+- Why it matters: Overall system efficiency
+- Good range: Varies by model and hardware, higher is better
+
+**Request Completion Rate**
+- What it measures: Percentage of successful requests
+- Why it matters: System reliability
+- Good range: > 99% for production systems
+
+### 4.8 What's Next?
+
+**If your first test was successful:**
+- Customize parameters for your specific content generation needs
+- Run additional scenarios (conversational_chat, rag_long_context)
+- Increase concurrency levels to test system capacity
+- Implement your results retrieval and reporting process
+
+**If you encountered issues:**
+- Check troubleshooting section (Section 3.6)
+- Verify network connectivity and API credentials
+- Review job and pod logs for error messages
+- Ensure cluster resources are sufficient
+
+**Next Steps in Documentation:**
+- Section 5: Running Model Selection Tests (detailed scenario configuration)
+- Section 6: Understanding Results (detailed metrics interpretation)
+- Section 7: Troubleshooting & FAQ
 
 ---
 
