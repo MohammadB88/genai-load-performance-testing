@@ -10,7 +10,7 @@ Two independent suites:
 - **Model Selection** — `model-selection/` — compares models on UX-relevant performance (TTFT, ITL, goodput). Baseline concurrency + a shallow 1/5/10/25 sweep.
 - **Capacity/Sizing** — `sizing/` — same 6 workload profiles, but run against a fixed concurrency ladder (1/5/10/25/50/100/200) to find where a given deployment's latency/goodput breaks down.
 
-Full scenario definitions and metrics tables: see `docs/scenarios/` and `docs/metrics/`.
+Full scenario definitions and metrics tables: see `docs/scenarios/` and `docs/metrics/`. Customer-facing guide: `docs/customer/performance-guide.md`.
 
 ## Conventions
 
@@ -23,4 +23,6 @@ Full scenario definitions and metrics tables: see `docs/scenarios/` and `docs/me
 
 ## Status
 
-Planning complete for both suites (scenarios, metrics). **No bash scripts**
+- **Model Selection** (`model-selection/`) — implemented: 3 scenario scripts (`run_content_generation.sh`, `run_conversational_chat.sh`, `run_rag_long_context.sh`), prompt datasets, and K8s Job manifests + ConfigMap/PVC generation under `model-selection/k8s/`.
+- **Sizing** (`sizing/`) — planning complete (scenarios, metrics); no scripts yet.
+- Customer-facing guide (`docs/customer/performance-guide.md`) is being revised to document the 3 implemented model-selection scenarios; unimplemented scenarios are intentionally excluded until built.
