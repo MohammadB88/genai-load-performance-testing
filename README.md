@@ -1,6 +1,6 @@
 # GenAI Load & Performance Testing Suite
 
-A reproducible LLM performance testing suite built on NVIDIA AIPerf. This tool is designed to help organizations (1) choose the right model for their specific use case and (2) determine the appropriate infrastructure sizing to support their load.
+A reproducible LLM performance testing suite built on [NVIDIA AIPerf](https://github.com/ai-dynamo/aiperf). This tool is designed to help organizations (1) choose the right model for their specific use case and (2) determine the appropriate infrastructure sizing to support their load.
 
 ## Overview
 
