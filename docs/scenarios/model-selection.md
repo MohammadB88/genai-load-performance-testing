@@ -17,7 +17,11 @@
 | **Batch / Non-Interactive** | 6,000 (fixed) | 800 | 1 (single-turn) | N/A | No | Baseline 1; sweep 1/5/10/25 |
 | **Content Generation** | 100 (fixed, short brief) | 800 (long-form output) | 1 (single-turn) | N/A | Yes | Baseline 1; sweep 1/5/10/25 |
 
-*(Code Generation: lower-priority 7th scenario, roadmap.)*
+*(Code Generation: lower-priority additional scenario, roadmap.)*
+
+## Sustained / Soak Load (orthogonal 7th scenario)
+
+Not part of the scenario matrix above — this scenario varies **duration**, not ISL/OSL/turns/streaming, so it doesn't fit the same table. See `docs/scenarios/README.md` ("Sustained / Soak Load" section) for the full rationale, and `model-selection/scripts/run_sustained_soak.sh` / `model-selection/prompts/sustained_soak.jsonl` for the implementation. Uses `random_pool` + `--dataset-sampling-strategy random` and `--benchmark-duration` (not request-count) — the one scenario in this suite where that combination is the right choice. Not yet wired into K8s, consistent with the current V1 scope decision to fully wire only Content Generation.
 
 ## Think-time implementation
 
