@@ -19,9 +19,7 @@
 
 *(Code Generation: lower-priority additional scenario, roadmap.)*
 
-## Sustained / Soak Load (orthogonal 7th scenario)
-
-Not part of the scenario matrix above — this scenario varies **duration**, not ISL/OSL/turns/streaming, so it doesn't fit the same table. See `docs/scenarios/README.md` ("Sustained / Soak Load" section) for the full rationale, and `model-selection/scripts/run_sustained_soak.sh` / `model-selection/prompts/sustained_soak.jsonl` for the implementation. Uses `random_pool` + `--dataset-sampling-strategy random` and `--benchmark-duration` (not request-count) — the one scenario in this suite where that combination is the right choice. Not yet wired into K8s, consistent with the current V1 scope decision to fully wire only Content Generation.
+Not part of this matrix: **Sustained / Soak Load**, an orthogonal scenario that varies duration rather than ISL/OSL/turns/streaming. See `docs/scenarios/sustained-soak-load.md`.
 
 ## Think-time implementation
 

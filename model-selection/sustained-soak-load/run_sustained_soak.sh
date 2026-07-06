@@ -3,8 +3,8 @@
 # run_sustained_soak.sh
 #
 # Model Selection suite — "Sustained / Soak Load" scenario.
-# See docs/scenarios/README.md ("Sustained / Soak Load" section) for why this
-# scenario exists and how it differs from the 6 workload-profile scenarios.
+# See docs/scenarios/sustained-soak-load.md for why this scenario exists and
+# how it differs from the 6 workload-profile scenarios.
 #
 # Unlike the other model-selection scripts (fixed prompt file, mooncake_trace,
 # replayed once, stopped by request count), this scenario is duration-driven:
@@ -13,15 +13,15 @@
 # produce a request-count-matched comparison point.
 #
 # Workload shape:
-#   - Prompts: model-selection/prompts/sustained_soak.jsonl — a small pool of
-#     short, varied realistic prompts (--custom-dataset-type random_pool,
-#     keyed on "text"), sampled WITH REPLACEMENT via
-#     --dataset-sampling-strategy random for the duration of the run. NOT
-#     replayed once like the other scenarios' mooncake_trace files — repeats
-#     are expected and fine here, since the point is sustained traffic, not
-#     one-shot coverage of every prompt. See docs/scenarios/README.md for why
-#     random_pool (not mooncake_trace) is the right dataset type for this
-#     scenario specifically.
+#   - Prompts: model-selection/sustained-soak-load/prompts/sustained_soak.jsonl
+#     — a small pool of short, varied realistic prompts
+#     (--custom-dataset-type random_pool, keyed on "text"), sampled WITH
+#     REPLACEMENT via --dataset-sampling-strategy random for the duration of
+#     the run. NOT replayed once like the other scenarios' mooncake_trace
+#     files — repeats are expected and fine here, since the point is
+#     sustained traffic, not one-shot coverage of every prompt. See
+#     docs/scenarios/README.md for why random_pool (not mooncake_trace) is
+#     the right dataset type for this scenario specifically.
 #   - Stopping condition: --benchmark-duration (default 1200s / 20 min), not
 #     request count. Paired with --benchmark-grace-period so in-flight
 #     responses at the deadline are still counted.
