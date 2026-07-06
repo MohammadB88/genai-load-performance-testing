@@ -31,20 +31,19 @@
   - [4.8 What's Next?](#48-whats-next)
 - [5. Running Model Selection Tests](#5-running-model-selection-tests)
   - [5.1 Testing Strategy Overview](#51-testing-strategy-overview)
-  - [5.2 Multi-Model Comparison Workflow (Default Approach)](#52-multi-model-comparison-workflow-default-approach)
-  - [5.3 Content Generation Scenario](#53-content-generation-scenario)
-  - [5.4 Conversational Chat Scenario](#54-conversational-chat-scenario)
-  - [5.5 RAG / Long-Context Scenario](#55-rag--long-context-scenario)
-  - [5.6 Common Configuration Parameters](#56-common-configuration-parameters)
-  - [5.7 Multi-Model Comparison Workflow](#57-multi-model-comparison-workflow)
-  - [5.8 Troubleshooting Model Selection Tests](#58-troubleshooting-model-selection-tests)
-  - [5.9 Summary of Findings](#59-summary-of-findings)
+  - [5.2 Content Generation Scenario](#52-content-generation-scenario)
+  - [5.3 Conversational Chat Scenario](#53-conversational-chat-scenario)
+  - [5.4 RAG / Long-Context Scenario](#54-rag--long-context-scenario)
+  - [5.5 Common Configuration Parameters](#55-common-configuration-parameters)
+  - [5.6 Multi-Model Comparison Workflow](#56-multi-model-comparison-workflow)
+  - [5.7 Troubleshooting Model Selection Tests](#57-troubleshooting-model-selection-tests)
+  - [5.8 Summary of Findings](#58-summary-of-findings)
 - [6. Understanding Results](#6-understanding-results)
   - [6.1 Overview of AIPerf Output](#61-overview-of-aiperf-output)
   - [6.2 Core Metrics Explained](#62-core-metrics-explained)
-  - [6.3 Reading Latency-vs-Concurrency Curves](#63-reading-latencyvsconcurrency-curves)
-  - [6.4 Mapping Results to Service-Level Agreements (SLAs)](#64-mapping-results-to-servicelevel-agreements-slas)
-  - [6.5 Model-Comparison Framework](#65-modelcomparison-framework)
+  - [6.3 Reading Latency-vs-Concurrency Curves](#63-reading-latency-vs-concurrency-curves)
+  - [6.4 Mapping Results to Service-Level Agreements (SLAs)](#64-mapping-results-to-service-level-agreements-slas)
+  - [6.5 Presenting Model Comparisons](#65-presenting-model-comparisons)
   - [6.6 Preliminary Infrastructure Insights (Placeholder)](#66-preliminary-infrastructure-insights-placeholder)
   - [6.7 Validating Result Quality](#67-validating-result-quality)
   - [6.8 Using Results for Next Steps](#68-using-results-for-next-steps)
@@ -66,27 +65,18 @@ This document provides a comprehensive guide for running reproducible LLM perfor
 
 ### 1.1 Goals & Objectives
 
-- **Model Selection Excellence**: Identify optimal models that balance intelligence, speed, and cost for specific use cases
-- **Infrastructure Optimization**: Determine precise compute resource requirements to maintain performance standards under load
-- **User Experience Assurance**: Guarantee responsive, smooth interactions that meet user expectations
-- **Cost Efficiency**: Right-size infrastructure to avoid over-provisioning while maintaining SLA compliance
-- **Risk Mitigation**: Data-driven decisions reduce deployment failures and performance regressions
-- **Scalability Planning**: Understand capacity limits and growth requirements before production launch
-- **Competitive Performance**: Validate that chosen models perform competitively against alternatives
-- **Production Readiness**: Ensure systems are validated and ready for real-world traffic patterns
+- **Model Selection**: Identify the model that best balances quality, speed, and cost for your specific use cases
+- **Infrastructure Sizing**: Determine the compute resources required to meet performance standards under expected load
+- **User Experience Assurance**: Validate responsiveness (TTFT, ITL, goodput) against real traffic patterns before production launch
+- **Risk Mitigation**: Understand capacity limits and failure points in advance, so deployment decisions rest on data rather than estimates
 
 ### 1.2 Business Value
 
-- **Cost Optimization**: Reduce infrastructure spend by 20-40% through precise capacity planning
+- **Cost Optimization**: Right-size infrastructure through precise capacity planning, avoiding over-provisioning while maintaining SLA compliance
 - **Performance Guarantees**: Establish SLAs backed by empirical data, not theoretical estimates
 - **Faster Time-to-Market**: Accelerate deployment decisions with clear performance data
 - **Reduced Downtime Risk**: Identify bottlenecks before they impact production users
-- **Better Resource Allocation**: Direct compute resources to high-impact workloads
-- **Vendor Negotiation Leverage**: Use performance data in vendor discussions and SLA negotiations
-- **Customer Satisfaction**: Deliver consistent user experiences that build trust
-- **Future-Proofing**: Understand scaling requirements for planned growth
-- **Budget Planning**: Accurate forecasting of infrastructure costs as user base grows
-- **Technical Debt Prevention**: Avoid costly re-architecting due to poor initial sizing decisions
+- **Budget Planning**: Forecast infrastructure costs accurately as the user base grows
 
 ### 1.3 High-Level Process Overview
 
@@ -203,7 +193,7 @@ The suite works with any backend that implements the OpenAI API specification, i
 
 ### 2.4 Technology Stack
 
-**NVIDIA AIPerf** *(Note: Version TBD - to be updated)*
+**NVIDIA AIPerf** *(version pinned per run — the K8s Job manifests currently reference `nvcr.io/nvidia/ai-dynamo/aiperf:0.10.0`)*
 Industry-standard LLM benchmarking tool that provides:
 - Synthetic and replay-based workload generation
 - Comprehensive performance metrics capture
@@ -280,12 +270,12 @@ Container orchestration platform that enables:
 - **Test Parameters**: Use ConfigMaps or environment variables for non-sensitive configuration
 
 **Resource Allocation:**
-- **Default Limits**: 2 CPUs, 4GB RAM per AIPerf job (suitable for most scenarios)
+- **Default Limits**: 2 CPUs, 2GB RAM per AIPerf job (suitable for most scenarios; see the `resources` block in each Job manifest)
 - **Adjustment Guidelines**: 
   - High-concurrency tests: Increase resources proportionally
   - Large-context scenarios: May require additional memory
   - Scale based on your cluster capacity and test requirements
-- **Storage**: 10GB persistent volume per test job (configurable based on expected output size)
+- **Storage**: One shared 20Gi persistent volume claim (`aiperf-model-selection-results`) across all model-selection scenarios; each scenario writes to its own subdirectory (configurable in `results-pvc.yaml`)
 
 ### 3.5 Quick Environment Verification
 
@@ -313,7 +303,7 @@ kubectl run curl-test --image=curlimages/curl --rm -it --restart=Never -- \
 **Verify Container Pull Access:**
 ```bash
 # Test NGC pull (requires NGC credentials)
-kubectl run image-test --image=nvcr.io/nvidia/aiperf:latest --rm -it --restart=Never -- \
+kubectl run image-test --image=nvcr.io/nvidia/ai-dynamo/aiperf:0.10.0 --rm -it --restart=Never -- \
   echo "NGC image pull successful"
 
 # OR test private registry pull
@@ -367,7 +357,7 @@ kubectl run image-test --image=your-registry.com/aiperf:latest --rm -it --restar
 ### 3.7 Known Limitations & Constraints
 
 **Current Implementation Scope:**
-- Only 3 model-selection scenarios are functional: conversational_chat, rag_long_context, content_generation
+- 3 of 6 model-selection scenarios are implemented: content_generation, rag_long_context, and conversational_chat — note that conversational_chat currently has a known dataset-schema issue (see Section 7.4)
 - Sizing suite not yet implemented
 - Jumphost fallback mode (native install, no Docker) is roadmap
 
@@ -427,33 +417,31 @@ We'll use the `content_generation` scenario for your quick start because it:
 
 ### 4.3 Configuration
 
-#### Step 1: Set Up API Credentials
+#### Step 1: Configure the Job Manifest
 
-Create a Kubernetes Secret with your LLM endpoint credentials:
+The test's target model and endpoint are set as environment variables in the Job manifest, `model-selection/k8s/content-generation-job.yaml`. Before applying it, edit:
+
+- `MODEL` — your model's identifier (as expected by the endpoint)
+- `URL` — your LLM endpoint's base URL (must be reachable from the cluster)
+- `image:` — pin to the exact NGC AIPerf tag you're using
+- `TOKENIZER_PATH` — HuggingFace repo ID or local path for the tokenizer
+
+If your tokenizer is a gated/private HuggingFace repo (e.g., `meta-llama/*`), also create the optional HF token secret:
 
 ```bash
-# Create secret with your API key
-kubectl create secret generic aiperf-credentials \
-  --from-literal=api-key='your-api-key-here' \
-  --from-literal=endpoint-url='https://your-llm-endpoint.com:8000' \
-  --from-literal=model-name='your-model-name'
-
-# Verify secret creation (should show: secret/aiperf-credentials created)
-kubectl get secret aiperf-credentials
+kubectl create secret generic aiperf-hf-token \
+  --from-literal=HF_TOKEN='hf_your_token_here' -n aiperf
 ```
 
-**Success Indicator**: You should see `secret/aiperf-credentials created` and `kubectl get secret aiperf-credentials` should list your secret.
+**Success Indicator**: The manifest's `MODEL` and `URL` values point at your endpoint, and (if needed) `kubectl get secret aiperf-hf-token -n aiperf` lists the secret.
 
 #### Step 2: Verify Test Scripts
 
-Ensure the content generation scenario scripts exist:
+Ensure the content generation scenario files exist in your clone:
 
 ```bash
-# List available scenario scripts
-ls model-selection/
-
 # Verify content generation script exists
-ls model-selection/run_content_generation.sh
+ls model-selection/scripts/run_content_generation.sh
 
 # Verify prompts exist
 ls model-selection/prompts/content_generation.jsonl
@@ -465,14 +453,29 @@ ls model-selection/prompts/content_generation.jsonl
 
 #### Step 1: Execute the Quick Start Job
 
-For this quick start, we'll run a simplified version of the content generation test:
+The easiest path is the orchestration script, which creates the namespace, ConfigMaps, results PVC, and Job in one step (it uses the `oc` CLI by default; set `OC_BIN=kubectl` on plain Kubernetes):
 
 ```bash
-# Run the content generation scenario with default parameters
-kubectl apply -f model-selection/k8s/content-generation-job.yaml
+./model-selection/k8s/run-test.sh -n aiperf -t content-generation
+```
+
+Or run the steps manually:
+
+```bash
+# One-time: shared results volume
+kubectl apply -f model-selection/k8s/results-pvc.yaml -n aiperf
+
+# Mount the scenario script and prompts as ConfigMaps
+kubectl create configmap aiperf-content-generation-script \
+  --from-file=run_content_generation.sh=model-selection/scripts/run_content_generation.sh -n aiperf
+kubectl create configmap aiperf-content-generation-prompts \
+  --from-file=content_generation.jsonl=model-selection/prompts/content_generation.jsonl -n aiperf
+
+# Launch the Job
+kubectl apply -f model-selection/k8s/content-generation-job.yaml -n aiperf
 
 # Monitor job startup
-kubectl get pods -l job-name=content-generation-test
+kubectl get pods -l job-name=aiperf-content-generation -n aiperf
 ```
 
 **Success Indicator**: You should see a pod with status `Running` or `Completed` after 30-60 seconds.
@@ -483,10 +486,10 @@ Watch the job execution:
 
 ```bash
 # View job status
-kubectl get job content-generation-test
+kubectl get job aiperf-content-generation -n aiperf
 
 # View pod logs to see test progress
-kubectl logs -f job/content-generation-test
+kubectl logs -f job/aiperf-content-generation -n aiperf
 ```
 
 **What to Expect in Logs:**
@@ -502,15 +505,15 @@ kubectl logs -f job/content-generation-test
 The content generation scenario uses realistic prompts that mirror business use cases. Here are 5 sample prompts you'll find in `model-selection/prompts/content_generation.jsonl`:
 
 ```
-{"prompt": "Write a 500-word blog post about sustainable technology trends for 2024, focusing on renewable energy innovations."}
+{"text_input": "Write a blog post introduction (3-4 sentences) announcing our company's new AI-powered customer support chatbot, aimed at small business owners who are skeptical of automation replacing human support."}
 
-{"prompt": "Create a product description for an AI-powered customer service chatbot, highlighting key features and benefits for small businesses."}
+{"text_input": "Draft a product description for a stainless steel insulated water bottle, 32oz, keeps drinks cold for 24 hours. Target audience: outdoor enthusiasts and hikers. Tone: energetic and adventurous."}
 
-{"prompt": "Draft a marketing email announcing a new cloud infrastructure service, targeting CTOs and IT directors at mid-sized companies."}
+{"text_input": "Write a LinkedIn post (under 200 words) from a VP of Engineering announcing that their team just shipped a major platform migration with zero downtime, thanking the team."}
 
-{"prompt": "Write a technical whitepaper abstract about machine learning model optimization techniques for edge computing devices."}
+{"text_input": "Compose a marketing email subject line and body promoting a 20%-off end-of-season sale for a home goods e-commerce store. Keep the tone warm and low-pressure."}
 
-{"prompt": "Generate a social media campaign plan for a B2B SaaS product launch, including content calendar and platform strategy."}
+{"text_input": "Write a short press release opening paragraph announcing a Series B funding round of $40 million for a climate-tech startup building carbon capture hardware."}
 ```
 
 **Note**: These prompts test the model's ability to generate high-quality, business-relevant content from brief inputs. Your actual tests may use custom prompts specific to your use cases.
@@ -519,35 +522,36 @@ The content generation scenario uses realistic prompts that mirror business use 
 
 #### Step 1: Access Test Results
 
-Results are stored in the persistent volume attached to the test pod:
+Results are written to `/artifacts/content-generation` on the shared results volume:
 
 ```bash
 # Find the completed pod
-POD_NAME=$(kubectl get pods -l job-name=content-generation-test -o jsonpath='{.items[0].metadata.name}')
+POD_NAME=$(kubectl get pods -l job-name=aiperf-content-generation -n aiperf -o jsonpath='{.items[0].metadata.name}')
 
 # Copy results from the pod
-kubectl cp $POD_NAME:/results ./quick-start-results --container=aiperf
+kubectl cp aiperf/$POD_NAME:/artifacts/content-generation ./quick-start-results --container=aiperf
 
 # List downloaded results
 ls quick-start-results/
 ```
 
-**Success Indicator**: You should see CSV and JSON files in the `./quick-start-results/` directory.
+**Success Indicator**: You should see the AIPerf export (CSV and JSON files) in the `./quick-start-results/` directory.
+
+**Note**: `kubectl cp` requires the pod to still exist. If it has been cleaned up, mount the `aiperf-model-selection-results` PVC in a temporary pod to retrieve the files.
 
 #### Step 2: Understand Result Structure
 
-Typical output files include:
-- `results_*.csv`: Raw performance metrics (detailed, per-request data)
-- `summary_*.json`: Aggregated metrics and test configuration
-- `configuration_*.json`: Complete test parameters for reproducibility
+The output is the raw AIPerf export — this suite deliberately adds no processed report layer on top of it:
+- **CSV export**: Detailed per-request metrics (TTFT, ITL, latencies, token counts)
+- **JSON export**: Aggregated metrics plus the full test configuration, for programmatic analysis and reproducibility
 
 **Key Files to Examine:**
 ```bash
-# View the summary file
-cat quick-start-results/summary_*.json
+# View the aggregated JSON export
+cat quick-start-results/*.json
 
-# View a sample of the detailed results
-head -n 20 quick-start-results/results_*.csv
+# View a sample of the detailed per-request metrics
+head -n 20 quick-start-results/*.csv
 ```
 
 ### 4.7 Key Metrics to Look For
@@ -617,17 +621,9 @@ This section provides a comprehensive, customer-focused guide for running reprod
   - Warm-up/cool-down periods  
   - Typical range: 20-60 minutes per scenario per concurrency level  
 
-### 5.2 Multi-Model Comparison Workflow (Default Approach)
-Our recommended default methodology uses a **round-robin by concurrency level** approach:
-1. Test all model candidates at Concurrency = 1  
-2. Test all model candidates at Concurrency = 5  
-3. Test all model candidates at Concurrency = 10  
-4. Test all model candidates at Concurrency = 25  
-- **Why this approach?** Direct comparison at each load level makes it easy to see relative scaling characteristics  
-- **Customization**: For specific use cases, you may focus on particular scenarios only  
-- **Consistency Critical**: Maintain identical cluster state, time of day, and network conditions  
+When comparing multiple model candidates, follow the round-robin workflow described in [Section 5.6](#56-multi-model-comparison-workflow).
 
-### 5.3 Content Generation Scenario  
+### 5.2 Content Generation Scenario  
 **Business Use Cases**:  
 - Marketing copy generation  
 - Article/report writing  
@@ -661,7 +657,10 @@ CONCURRENCY=5 ./run_content_generation.sh
 - **Goodput**: "Higher indicates better throughput efficiency" - balances speed and error rate  
 - **Request Completion Rate**: "Higher indicates better reliability" - % of successful generations  
 
-### 5.4 Conversational Chat Scenario  
+### 5.3 Conversational Chat Scenario  
+
+> **⚠ Known issue**: This scenario's `multi_turn` dataset is currently rejected by AIPerf with a Pydantic validation error — see [Section 7.4](#74-known-issues--limitations) for status and workarounds. The configuration below describes the intended workload; use the other two scenarios until the schema issue is resolved.
+
 **Business Use Cases**:  
 - Customer service chatbots  
 - Virtual assistants  
@@ -692,7 +691,7 @@ CONCURRENCY=5 ./run_content_generation.sh
 - Conversation Success Rate: Measures multi-turn interaction stability  
 - Context Handling: Qualitative assessment of coherent follow-ups  
 
-### 5.5 RAG / Long-Context Scenario  
+### 5.4 RAG / Long-Context Scenario  
 **Business Use Cases**:  
 - Document analysis for research/legal/financial teams  
 - Technical support knowledge base retrieval  
@@ -708,8 +707,8 @@ CONCURRENCY=5 ./run_content_generation.sh
 
 **Execution**:  
 ```bash
-# Similar setup to content generation, but with different script
-kubectl apply -f model-selection/k8s/rag_long_context-job.yaml
+# Similar setup to content generation, but with a different script/manifest
+kubectl apply -f model-selection/k8s/rag-long-context-job.yaml -n aiperf
 ```
 
 **Duration Expectation**: 30-60 minutes per concurrency level (often longest due to context processing complexity)
@@ -721,11 +720,11 @@ Context Utilization Effectiveness: "Higher suggests better use of provided infor
 Request Completion Rate: "Higher indicates reliable complex query handling"  
 - Qualitative note: Evaluate whether responses actually use relevant context points  
 
-### 5.6 Common Configuration Parameters  
+### 5.5 Common Configuration Parameters  
 **Required Parameters** (must be set for all tests):  
 - `MODEL`: Target model identifier/name  
 - `URL`: LLM endpoint base URL (e.g., `http://localhost:8000`)  
-- `ENDPOINT_TYPE`: Usually "openai" for OpenAI-compatible APIs  
+- `ENDPOINT_TYPE`: `chat` for OpenAI-compatible chat completions APIs (the default)  
 - `ENDPOINT_PATH`: Typically `/v1/chat/completions`  
 
 **Optional Parameters** (safe defaults):  
@@ -739,9 +738,12 @@ Request Completion Rate: "Higher indicates reliable complex query handling"
 - **Alternative**: Direct script modification for permanent baseline changes  
 - **Best Practice**: Create wrapper scripts for specific test suites  
 
-### 5.7 Multi-Model Comparison Workflow  
-**Primary Use Case**: Selecting optimal model from candidates based on performance  
-**Recommended Process** (assuming round-robin testing):  
+### 5.6 Multi-Model Comparison Workflow  
+**Primary Use Case**: Selecting the optimal model from candidates based on performance.
+
+Our recommended default methodology is **round-robin by concurrency level** — test every candidate at one load level before moving to the next. Direct comparison at each load level makes relative scaling characteristics easy to see, and keeps environmental drift (cluster state, time of day, network conditions) from favoring one model.
+
+**Recommended Process**:  
 1. Define model candidates (2-4 models for meaningful comparison)  
 2. Prepare identical test environment (same cluster, time of day, network conditions)  
 3. For each concurrency level [1, 5, 10, 25]:  
@@ -751,7 +753,7 @@ Request Completion Rate: "Higher indicates reliable complex query handling"
    d. [Optional] Re-test reference model to check for drift  
 4. Collect and normalize results for comparison  
 - **Comparison Framework**:  
-  - Create tables showing metrics side-by-side across models/concern levels  
+  - Create tables showing metrics side-by-side across models/concurrency levels  
   - Use radar/spider charts for multi-metric comparison  
   - Apply weighting based on business priorities (latency vs. throughput vs. quality)  
   - Identify Pareto-optimal models (no worse on any metric, better on at least one)  
@@ -760,8 +762,9 @@ Request Completion Rate: "Higher indicates reliable complex query handling"
   - Throughput-focused apps: Prioritize high goodput/request rate  
   - Quality-sensitive apps: May accept higher latency for better output fidelity  
   - Document rationale for selection to support future re-evaluation  
+- **Customization**: For specific use cases, you may focus on particular scenarios only  
 
-### 5.8 Troubleshooting Model Selection Tests  
+### 5.7 Troubleshooting Model Selection Tests  
 **Scenario-Specific Issues**:  
 - Content Generation: Output truncation → Check `OUTPUT_TOKENS_MEAN` setting  
 - Conversational Chat: Context drift in prolonged dialogues → May indicate context window limits  
@@ -780,7 +783,7 @@ Request Completion Rate: "Higher indicates reliable complex query handling"
   - Verify no unexpected errors in job logs  
   - Check warm-up vs. actual request counts in logs  
 
-### 5.9 Summary of Findings  
+### 5.8 Summary of Findings  
 - The testing framework enables data-driven model selection through standardized, reproducible evaluations  
 - Business value comes from quantifying performance across UX-relevant metrics rather than subjective impressions  
 - Results should inform both model choice and infrastructure requirements for production deployment  
@@ -792,43 +795,68 @@ Request Completion Rate: "Higher indicates reliable complex query handling"
 ## 6. Understanding Results
 
 ### 6.1 Overview of AIPerf Output
-- Brief overview of the provided output format and output files (e.g., CSV/JSON files written to `./artifacts/<scenario>/`).
-- Reference to the `metrics-directory` where metric summary tables are stored for quick reference.
+
+Each test run writes its raw AIPerf export - CSV and JSON files - into the scenario's output directory (`OUTPUT_DIR`, default `./artifacts/<scenario>/` locally, `/artifacts/<scenario>/` on the shared PVC in Kubernetes). This raw export is the deliverable: the suite deliberately adds no processed or reformatted report layer on top of it, so results stay directly traceable to the tool that produced them.
+
+- The **CSV export** contains detailed per-request telemetry (TTFT, ITL, latencies, token counts).
+- The **JSON export** contains aggregated metrics plus the complete test configuration, for programmatic analysis and reproducibility.
+
+For a quick-reference summary of which metrics each scenario emphasizes, see the metric tables in `docs/metrics/model-selection.md`.
 
 ### 6.2 Core Metrics Explained
-- Include a placeholder chart/graph illustrating typical TTFT and ITL versus concurrency for a "good" model vs. a "bad" model.
-- Reference the metric tables stored under the `metrics-directory`; these tables contain column headings such as `scenario`, `concurrency`, `ttft_ms`, `itl_ms`, `goodput_pct`, `success_rate`.
 
-### 6.3 Reading Latency‑vs‑Concurrency Curves
-- Provide a simple heuristic for locating the “knee”: look for where the latency increase per added concurrency exceeds a noticeable threshold.
-- **Notice**: Readers can dive deeper into the three zones (Linear, Knee, Saturation) if desired; this notice hints at the optional detailed explanation.
+The metric definitions and calculations are documented in [Section 8.6](#86-metrics-calculation-reference); the four to focus on for model selection are TTFT (perceived responsiveness), ITL (streaming smoothness), goodput (percentage of requests meeting all latency targets simultaneously), and success rate (reliability).
 
-### 6.4 Mapping Results to Service‑Level Agreements (SLAs)
-- High‑level guidance: use your SLA (e.g., 95 % of requests < 2 s TTFT) to read off the maximum sustainable concurrency from the latency‑vs‑concurrency curve.
-- **Notice (Option B)**: A placeholder example table could show concurrency, 95th‑percentile TTFT, and SLA compliance status.
+**[PLACEHOLDER: chart illustrating typical TTFT and ITL versus concurrency for a well-performing model vs. a poorly-scaling model - to be added after the first customer test runs]**
 
-### 6.5 Model‑Comparison Framework
-- Recommend testing all candidates at each concurrency level (1/5/10/25) and presenting side‑by‑side tables (placeholder) of TTFT, ITL, Goodput, and Success Rate.
-- **Notice (Option D)**: A brief decision‑tree can be added to help prioritize metrics based on business focus (latency‑sensitive, throughput‑sensitive, quality‑sensitive).
+### 6.3 Reading Latency-vs-Concurrency Curves
+
+Plot a latency metric (e.g., P95 TTFT) against concurrency level. The curve typically shows three zones:
+
+- **Linear zone**: Latency stays roughly flat as concurrency grows - the system is comfortably under-utilized.
+- **The knee**: The point where latency begins to rise sharply. This is the maximum sustainable capacity.
+- **Saturation zone**: Latency spikes dramatically; users experience significant delays and requests may start failing.
+
+A simple heuristic for locating the knee: step through the concurrency ladder and watch the latency increase per added concurrency step - the knee is where that increase jumps well beyond the trend of the previous steps (e.g., latency growth per step more than doubles).
+
+### 6.4 Mapping Results to Service-Level Agreements (SLAs)
+
+Use your SLA to read the maximum sustainable concurrency directly off the curve. For example, if your requirement is "95% of requests must show a first token in under 2 seconds," find the highest concurrency level at which P95 TTFT is still below 2s - that is your capacity limit for the tested configuration.
+
+**[PLACEHOLDER: example table showing concurrency, P95 TTFT, and SLA compliance status - to be filled with real run data]**
+
+### 6.5 Presenting Model Comparisons
+
+Follow the round-robin workflow in [Section 5.6](#56-multi-model-comparison-workflow), then present results as side-by-side tables of TTFT, ITL, goodput, and success rate - one table per scenario, one row per model, one column group per concurrency level. Prioritize metrics by business focus: latency-sensitive applications weight TTFT/ITL, throughput-sensitive applications weight goodput and request rate.
+
+**[PLACEHOLDER: side-by-side comparison table - to be filled with real run data]**
 
 ### 6.6 Preliminary Infrastructure Insights (Placeholder)
-- Note that the observed knee in model‑selection curves provides a rough upper bound for a single‑node/GPU estimate; full infrastructure sizing will be covered in a future version (Section 8 or a dedicated sizing guide).
+
+The knee observed in model-selection curves provides a rough upper bound for what a single deployment of the tested configuration can sustain. Full infrastructure sizing - the dedicated concurrency ladder up to 200 concurrent users - will be covered by the Capacity/Sizing suite in a future version of this guide.
 
 ### 6.7 Validating Result Quality
-- Quick reminder to verify that results look reasonable before proceeding.
-- **Notice (Option A)**: Short bullet list – check token counts, spot‑check responses for basic coherence, scan logs for errors.
-- **Notice (Option B)**: More detailed checklist (e.g., `grep -i error *.log`, verify input/output token counts) can be added later.
+
+Before drawing conclusions from a run, verify the results look reasonable:
+
+- Check that input/output token counts match the scenario's configured ISL/OSL.
+- Confirm the success rate - if more than a few percent of requests failed, latency numbers describe only the surviving requests and may be misleadingly good.
+- Spot-check a few responses for basic coherence (this is a sanity check, not a quality assessment).
+- Scan the job logs for errors and confirm the warm-up request count matches the configuration.
 
 ### 6.8 Using Results for Next Steps
-- Minimal wrap‑up: document the chosen model and note that it will feed into the upcoming infrastructure‑sizing suite.
-- **Notice (Option A)**: Short checklist – archive results, write model‑selection rationale, prepare sizing suite.
-- **Notice (Option B)**: Expanded checklist can be added later (e.g., stakeholder review, baseline establishment).
+
+Once you've selected a model:
+
+1. Commit the raw results to the repository (see [Section 8.7](#87-git-workflow-for-reproducibility)).
+2. Document the model-selection rationale alongside the data, so the decision can be re-evaluated later.
+3. Carry the chosen model forward into the infrastructure-sizing phase, using the observed knee as the starting hypothesis for capacity.
 
 ---
 
 ## 7. Troubleshooting & FAQ
 
-This section covers common issues encountered when running the model selection test suite, organized by where in the workflow the problem appears. For basic environment setup issues (API connectivity, missing scripts, image pulls, PVC binding) see [Section 3.6](#36-common-issues--troubleshooting). For scenario-specific configuration problems see [Section 5.8](#58-troubleshooting-model-selection-tests).
+This section covers common issues encountered when running the model selection test suite, organized by where in the workflow the problem appears. For basic environment setup issues (API connectivity, missing scripts, image pulls, PVC binding) see [Section 3.6](#36-common-issues--troubleshooting). For scenario-specific configuration problems see [Section 5.7](#57-troubleshooting-model-selection-tests).
 
 ### 7.1 Setup & Environment
 
@@ -1133,7 +1161,6 @@ Each test run in the `model-selection/k8s/` suite creates or uses the following 
 | Resource Type | Name | Purpose | Created By |
 |---------------|------|---------|------------|
 | Namespace | `aiperf` (default) | Isolated environment for test execution | `run-test.sh` |
-| Secret | `aiperf-credentials` | API key and endpoint URL for LLM access | Customer (manual) |
 | Secret | `aiperf-hf-token` | HuggingFace token for gated model tokenizers (optional) | `run-test.sh` |
 | ConfigMap | `aiperf-<scenario>-script` | Scenario bash script mounted into the Job container | `generate-configmaps.sh` |
 | ConfigMap | `aiperf-<scenario>-prompts` | Prompt JSONL file mounted into the Job container | `generate-configmaps.sh` |
@@ -1143,7 +1170,8 @@ Each test run in the `model-selection/k8s/` suite creates or uses the following 
 
 **Job template parameters to customize** (in each `*-job.yaml`):
 - `image:` — AIPerf container image tag (default: `nvcr.io/nvidia/ai-dynamo/aiperf:0.10.0` — update as needed)
-- `resources.limits/requests` — CPU/memory per job pod (default: 2 CPU, 4GB RAM)
+- `env.MODEL` / `env.URL` — target model identifier and endpoint base URL (required before applying)
+- `resources.limits/requests` — CPU/memory per job pod (default limits: 2 CPU, 2GB RAM)
 - `storageClassName` in `results-pvc.yaml` — set to your cluster's storage class
 
 ### 8.6 Metrics Calculation Reference
@@ -1171,10 +1199,9 @@ The project uses Git as the single source of truth for both configuration and re
 **Commit structure:**
 
 ```
-<scenario>/results/<model>/<concurrency>/     # Raw AIPerf export (CSV + JSON)
-├── results_*.csv                              # Per-request metrics
-├── summary_*.json                             # Aggregated metrics
-├── configuration_*.json                       # Full test parameters
+model-selection/results/<model>/<scenario>/<concurrency>/
+├── <AIPerf CSV export>                        # Per-request metrics
+├── <AIPerf JSON export>                       # Aggregated metrics + full test configuration
 └── aiperf-version.txt                         # Pinned AIPerf version
 ```
 
