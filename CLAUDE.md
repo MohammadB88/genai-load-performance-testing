@@ -12,6 +12,8 @@ Two independent suites:
 
 **v1 scope is Content Generation only.** Conversational Chat and RAG/Long-Context were pulled out of v1 and live under `version2/` (not wired into either suite, not documented as current status). Ignore `version2/` unless explicitly asked to work on it — it's future scope, not dead code.
 
+A third, orthogonal scenario — **Sustained/Soak Load** (`model-selection/sustained-soak-load/`) — varies wall-clock duration instead of ISL/OSL/turns, to catch degradation over long continuous runs (memory leaks, KV-cache fragmentation, GC pauses). Uses `--benchmark-duration` + `random_pool` sampling rather than the fixed-request-count `mooncake_trace` replay the other scenarios use. See `docs/scenarios/sustained-soak-load.md` and `docs/scenarios/README.md` (general AIPerf stopping-condition/sampling background).
+
 Full scenario definitions and metrics tables: see `docs/scenarios/` and `docs/metrics/`. Customer-facing guide: `docs/customer/performance-guide.md`.
 
 ## Conventions
@@ -27,5 +29,6 @@ Full scenario definitions and metrics tables: see `docs/scenarios/` and `docs/me
 
 - **Model Selection** (`model-selection/`) — implemented for v1 scope (Content Generation only): `run_content_generation.sh`, its prompt dataset, and K8s Job manifests + ConfigMap/PVC generation under `model-selection/k8s/`.
 - Conversational Chat and RAG/Long-Context scripts, prompts, and K8s manifests moved to `version2/` — out of scope for v1, not integrated, not maintained as part of the current suites.
-- **Sizing** (`sizing/`) — planning complete (scenarios, metrics); no scripts yet.
+- **Sizing** (`sizing/`) — implemented for v1 scope (Content Generation only): `run_content_generation.sh` (one aiperf invocation per ladder rung, plus a backgrounded `dcgmi`/`nvidia-smi` GPU-metrics polling loop), its prompt dataset, and K8s manifests under `sizing/k8s/` (one Job per rung, shared PVC, and `run-test.sh` which runs the full ladder and enforces the error-rate circuit breaker between rungs). Prometheus-based server-side metrics (queue depth, batch size, KV cache %) are documented but not yet captured — no exporter/scrape setup assumed.
+- **Sustained/Soak Load** (`model-selection/sustained-soak-load/`) — script + prompts checked in and runnable standalone; **not yet wired into K8s** (add a Job manifest mirroring `model-selection/k8s/content-generation-job.yaml` when prioritized).
 - Customer-facing guide (`docs/customer/performance-guide.md`) is being revised to document only the v1 Content Generation scenario; unimplemented/deferred scenarios are intentionally excluded until built.
