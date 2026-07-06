@@ -6,6 +6,8 @@ Sources:
 - Gist: [AIPerf Comprehensive Benchmarking Guide](https://gist.github.com/BenHamm/31c648f7d7331c94c1f3a45859db6677) (AIPerf v0.3.0)
 - You Video transcript [AI Perf Benchmarking](https://www.youtube.com/watch?v=OuQCSOIR-Y8): Dynamo office hours, AIPerf benchmarking walkthrough (same content plus Q&A)
 
+Runnable companions: each use case below has a hands-on notebook under `notebooks/` (`aiperf_uc1_synthetic_profiling.ipynb` … `aiperf_uc5_time_slices.ipynb`).
+
 Demo endpoint used throughout the gist: Qwen3-0.6B on vLLM v0.11.0, 8 independent replicas across 8× H200 on Kubernetes — deliberately overprovisioned, and taken down after the session.
 
 ## What AIPerf is
