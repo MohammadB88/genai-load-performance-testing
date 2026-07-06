@@ -1,6 +1,7 @@
 # Requirements for running notebooks under notebooks/.
-# This does NOT include aiperf itself — the notebooks shell out to the
-# scenario bash scripts, which invoke the `aiperf` CLI from whatever
+# This does NOT include aiperf itself — the scenario notebook shells out to
+# the scenario bash scripts, and the aiperf_uc*.ipynb use-case notebooks
+# invoke the `aiperf` CLI directly; either way aiperf comes from whatever
 # environment/image it's installed in (see each notebook's Requirements
 # section for how to point at it).
 jupyter>=1.0
