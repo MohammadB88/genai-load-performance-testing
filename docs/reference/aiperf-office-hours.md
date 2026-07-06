@@ -4,7 +4,7 @@ Notes distilled from NVIDIA's Dynamo office-hours session on AIPerf (Ben Hamm, P
 
 Sources:
 - Gist: [AIPerf Comprehensive Benchmarking Guide](https://gist.github.com/BenHamm/31c648f7d7331c94c1f3a45859db6677) (AIPerf v0.3.0)
-- Video transcript: Dynamo office hours, AIPerf benchmarking walkthrough (same content plus Q&A)
+- You Video transcript [AI Perf Benchmarking](https://www.youtube.com/watch?v=OuQCSOIR-Y8): Dynamo office hours, AIPerf benchmarking walkthrough (same content plus Q&A)
 
 Demo endpoint used throughout the gist: Qwen3-0.6B on vLLM v0.11.0, 8 independent replicas across 8× H200 on Kubernetes — deliberately overprovisioned, and taken down after the session.
 
