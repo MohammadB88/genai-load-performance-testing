@@ -8,7 +8,9 @@ Reproducible LLM performance testing suite built on NVIDIA AIPerf, backend-agnos
 
 Two independent suites:
 - **Model Selection** — `model-selection/` — compares models on UX-relevant performance (TTFT, ITL, goodput). Baseline concurrency + a shallow 1/5/10/25 sweep.
-- **Capacity/Sizing** — `sizing/` — same 6 workload profiles, but run against a fixed concurrency ladder (1/5/10/25/50/100/200) to find where a given deployment's latency/goodput breaks down.
+- **Capacity/Sizing** — `sizing/` — same workload profiles, but run against a fixed concurrency ladder (1/5/10/25/50/100/200) to find where a given deployment's latency/goodput breaks down.
+
+**v1 scope is Content Generation only.** Conversational Chat and RAG/Long-Context were pulled out of v1 and live under `version2/` (not wired into either suite, not documented as current status). Ignore `version2/` unless explicitly asked to work on it — it's future scope, not dead code.
 
 Full scenario definitions and metrics tables: see `docs/scenarios/` and `docs/metrics/`. Customer-facing guide: `docs/customer/performance-guide.md`.
 
@@ -23,6 +25,7 @@ Full scenario definitions and metrics tables: see `docs/scenarios/` and `docs/me
 
 ## Status
 
-- **Model Selection** (`model-selection/`) — implemented: 3 scenario scripts (`run_content_generation.sh`, `run_conversational_chat.sh`, `run_rag_long_context.sh`), prompt datasets, and K8s Job manifests + ConfigMap/PVC generation under `model-selection/k8s/`.
+- **Model Selection** (`model-selection/`) — implemented for v1 scope (Content Generation only): `run_content_generation.sh`, its prompt dataset, and K8s Job manifests + ConfigMap/PVC generation under `model-selection/k8s/`.
+- Conversational Chat and RAG/Long-Context scripts, prompts, and K8s manifests moved to `version2/` — out of scope for v1, not integrated, not maintained as part of the current suites.
 - **Sizing** (`sizing/`) — planning complete (scenarios, metrics); no scripts yet.
-- Customer-facing guide (`docs/customer/performance-guide.md`) is being revised to document the 3 implemented model-selection scenarios; unimplemented scenarios are intentionally excluded until built.
+- Customer-facing guide (`docs/customer/performance-guide.md`) is being revised to document only the v1 Content Generation scenario; unimplemented/deferred scenarios are intentionally excluded until built.
