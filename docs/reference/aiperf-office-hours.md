@@ -103,3 +103,15 @@ Same benchmark rerun at concurrency 10/50/100/200/500, plotting **TPS-per-GPU (c
 | Real-trace replay with timestamps (`--fixed-schedule`) | Not used — our `mooncake_trace` usage is format-only, fixed-order replay |
 | DCGM-exporter GPU telemetry via AIPerf | Not used — sizing polls `dcgmi`/`nvidia-smi` instead |
 | Request cancellation testing | Not used |
+
+## Assessment — gist/transcript vs. this repo
+
+- **The gist is a demo, this repo is a methodology — and the repo is right to be stricter.** The gist optimizes for "look what AIPerf can do" (overprovisioned 8×H200 endpoint, SLOs picked from a previous run's medians, a Pareto anomaly at concurrency 500 shrugged off as "maybe port exhaustion"). This repo's conventions — pinned versions, committed raw exports, script-as-config, docs kept in sync with scripts — are exactly the discipline the gist lacks, and that discipline is what makes results defensible in front of a customer.
+
+- **The biggest genuinely new ideas from the gist are `--slice-duration` and `--goodput`, and both are cheap wins here.** Time-slicing is almost tailor-made for the sustained/soak scenario (the whole point is degradation *within* a run, which the end-of-run aggregate hides), and passing `--goodput` in the scripts would put the "most decision-relevant number" (per `docs/metrics/`) directly in the committed export instead of leaving it post-hoc. Neither breaks the raw-export convention — they just enrich it.
+
+- **The trace-replay story exposes the one real weakness of this repo's approach: no prefix-reuse realism.** The repo uses `mooncake_trace` as a file format for deterministic replay of 18–20 independent prompts, which is ideal for comparability but means KV-cache effects (prefix caching, KV-aware routing) are invisible by construction. For model selection that's fine; for sizing a deployment whose economics depend on cache hit rates, it can materially overstate required capacity. Worth a documented caveat now, and possibly a v2 scenario later.
+
+- **The gist quietly validates several decisions already made here.** Raw JSONL/CSV export as the deliverable ("slice and dice it yourself"), in-cluster load generation to kill network confounders, warm-up handling (their slice-0 cold-start finding is why `--warmup-request-count` in the scripts matters), and the concurrency-ladder/Pareto workflow that `sizing/` already formalizes with an error-rate circuit breaker the gist doesn't have. The repo isn't behind the state of the art — it's mostly ahead on rigor.
+
+- **The main strategic risk is roadmap overlap, not missing features.** AIPerf is actively growing toward things this repo half-built or deferred: native Kubernetes distributed load generation, server-side metrics (the documented-but-not-captured queue depth / KV-cache %), DCGM-based GPU telemetry (vs. the sizing suite's hand-rolled `dcgmi` polling loop), and automatic plots. Since the AIPerf version is pinned per run anyway, the smart posture is to track its releases and delete custom scaffolding as upstream catches up — the less custom harness code, the more portable this suite stays across customers.
