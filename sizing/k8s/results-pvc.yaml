@@ -1,0 +1,27 @@
+# Shared PVC for all Capacity/Sizing suite scenario results.
+#
+# One PVC per suite (not per scenario, not per rung) — every scenario Job (and
+# every concurrency rung within a scenario) mounts this same claim and writes
+# to its own OUTPUT_DIR subpath (e.g. /artifacts/content-generation/rung-50),
+# so results accumulate side by side instead of needing a separate PVC each.
+#
+# Apply once per namespace before running any scenario Job:
+#   kubectl apply -f sizing/k8s/results-pvc.yaml -n <namespace>
+#
+# Required edit before applying:
+#   - storageClassName: set to a StorageClass that exists on the target
+#     cluster (omit the field entirely to use the cluster default)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: aiperf-sizing-results
+  labels:
+    app.kubernetes.io/part-of: genai-load-performance-testing
+    app.kubernetes.io/component: sizing
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: "ocs-storagecluster-ceph-rbd"   # TODO: set to a StorageClass on the target cluster, or remove this line to use the default
+  resources:
+    requests:
+      storage: 50Gi      # shared across all scenarios AND all 7 ladder rungs; grow if running many sweeps before retrieval

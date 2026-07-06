@@ -1,0 +1,154 @@
+# Capacity/Sizing suite — "Content Generation" scenario, run as a K8s Job.
+#
+# The script itself (sizing/scripts/run_content_generation.sh) is the source
+# of truth for the aiperf invocation — this manifest just mounts it (plus its
+# sample prompts file) into the NGC AIPerf image and supplies config via env
+# vars, since the pod has no TTY for the script's interactive prompts.
+#
+# ONE RUNG PER JOB: this manifest runs a single concurrency value (CONCURRENCY
+# below). The sizing ladder is 1/5/10/25/50/100/200 (see
+# docs/scenarios/sizing.md) — apply this manifest once per rung, changing
+# CONCURRENCY and metadata.name each time (see run-test.sh, which automates
+# this and stops the ladder if a rung's error rate crosses the safety
+# threshold).
+#
+# This suite shares ONE PersistentVolumeClaim across all sizing scenario Jobs
+# AND across rungs (see results-pvc.yaml) — each rung writes to its own
+# OUTPUT_DIR subpath on that shared claim rather than getting its own PVC.
+#
+# GPU metrics: the script backgrounds a dcgmi/nvidia-smi polling loop, which
+# requires the DCGM tools or NVIDIA driver userspace to be present in the
+# container/node (e.g. via the NVIDIA device plugin + DCGM DaemonSet already
+# running on the cluster, or a DCGM sidecar). This manifest does not install
+# DCGM itself. Set GPU_METRICS=0 below if running against a CPU-only backend
+# or a node without GPU tooling.
+#
+# Usage (single rung, manual):
+#   kubectl apply -f sizing/k8s/results-pvc.yaml -n <namespace>   # once per namespace
+#   kubectl create configmap aiperf-sizing-content-generation-script \
+#     --from-file=run_content_generation.sh=sizing/scripts/run_content_generation.sh \
+#     -n <namespace>
+#   kubectl create configmap aiperf-sizing-content-generation-prompts \
+#     --from-file=content_generation.jsonl=sizing/prompts/content_generation.jsonl \
+#     -n <namespace>
+#   kubectl create secret generic aiperf-hf-token \
+#     --from-literal=HF_TOKEN=hf_xxx \
+#     -n <namespace>
+#   # Only needed if TOKENIZER_PATH points at a gated/private HF repo (e.g.
+#   # meta-llama/*); otherwise omit the secret and leave HF_TOKEN unset below.
+#   kubectl apply -f sizing/k8s/content-generation-job.yaml -n <namespace>
+#
+# Prefer run-test.sh for the full ladder — it generates one Job per rung from
+# this manifest's pattern and checks the circuit breaker between rungs.
+#
+# Retrieve results after completion:
+#   kubectl cp <namespace>/<pod-name>:/artifacts/rung-1 ./results/content-generation/rung-1/
+#   (or read directly from the PVC if reused by a later Job/pod)
+#
+# Required edits before applying:
+#   - image: pin to the exact NGC AIPerf tag you're using
+#   - env.MODEL / env.URL: set to the target model and endpoint
+#   - env.CONCURRENCY / metadata.name / env.OUTPUT_DIR: set per rung
+#   - aiperf-hf-token secret: only needed if TOKENIZER_PATH is a gated/private
+#     HF repo; the HF_TOKEN env is marked optional so the Job still runs fine
+#     without the secret present
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: aiperf-sizing-content-generation-rung-1   # TODO: suffix with the rung, e.g. -rung-50
+  labels:
+    app.kubernetes.io/part-of: genai-load-performance-testing
+    app.kubernetes.io/component: sizing
+    scenario: content-generation
+    rung: "1"                                     # TODO: match metadata.name's rung
+spec:
+  backoffLimit: 0            # benchmark runs are not safe to blindly retry; investigate failures instead
+  activeDeadlineSeconds: 7200 # sizing rungs run longer than model-selection's sweep; adjust for your highest rung
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/part-of: genai-load-performance-testing
+        app.kubernetes.io/component: sizing
+        scenario: content-generation
+        rung: "1"
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: aiperf
+          image: nvcr.io/nvidia/ai-dynamo/aiperf:0.10.0   # TODO: pin to the exact NGC AIPerf image tag
+          command: ["/bin/bash", "/scripts/run_content_generation.sh"]
+          env:
+            # ---- Required: target model/endpoint --------------------------
+            - name: MODEL
+              value: "granite-3-1-8b-instruct"
+            - name: URL
+              value: "http://granite-3-1-8b-instruct-predictor.ic-shared-llm.svc.cluster.local:8080/v1"
+            - name: ENDPOINT_TYPE
+              value: "chat"
+            - name: ENDPOINT_PATH
+              value: "/v1/chat/completions"
+
+            # ---- Scenario parameters (Content Generation, fixed ladder) ----
+            # See docs/scenarios/sizing.md — keep in sync if changed.
+            - name: CONCURRENCY
+              value: "1"                                   # TODO: one of 1/5/10/25/50/100/200
+            - name: OUTPUT_TOKENS_MEAN
+              value: "800"
+            - name: WARMUP_REQUESTS
+              value: "10"
+            - name: RANDOM_SEED
+              value: "42"
+
+            # ---- GPU / server-side metrics ---------------------------------
+            - name: GPU_METRICS
+              value: "1"                                   # set to "0" if backend is CPU-only or node lacks GPU tooling
+            - name: GPU_POLL_INTERVAL_SECS
+              value: "5"
+
+            # ---- Non-interactive requirements ------------------------------
+            # Must be set (even if empty) so the script's `read -p` prompts
+            # are skipped — there is no TTY/stdin in a pod.
+            - name: TOKENIZER_PATH
+              value: "ibm-granite/granite-3.3-8b-instruct"
+            - name: TOKENIZER_TRUST_REMOTE_CODE
+              value: "0"
+            - name: HF_HOME
+              value: "/tmp/hf-home"
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: aiperf-hf-token                     # TODO: remove this env entry if TOKENIZER_PATH is not a gated/private HF repo
+                  key: HF_TOKEN
+                  optional: true
+            - name: INPUT_FILE
+              value: "/prompts/content_generation.jsonl"
+            - name: OUTPUT_DIR
+              value: "/artifacts/content-generation/rung-1" # TODO: match the rung — keep unique per rung on the shared PVC
+          volumeMounts:
+            - name: script
+              mountPath: /scripts
+              readOnly: true
+            - name: prompts
+              mountPath: /prompts
+              readOnly: true
+            - name: artifacts
+              mountPath: /artifacts
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "2"
+              memory: "2Gi"
+      volumes:
+        - name: script
+          configMap:
+            name: aiperf-sizing-content-generation-script
+            defaultMode: 0755
+        - name: prompts
+          configMap:
+            name: aiperf-sizing-content-generation-prompts
+        - name: artifacts
+          persistentVolumeClaim:
+            claimName: aiperf-sizing-results   # shared across all sizing scenarios AND rungs, see results-pvc.yaml
