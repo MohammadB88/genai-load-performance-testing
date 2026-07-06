@@ -21,3 +21,4 @@ hf-cache/
 # Scratch/ad-hoc files, not part of any scenario suite
 prompts.jsonl
 sample-script.sh
+version2
