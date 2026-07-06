@@ -1,0 +1,8 @@
+# Requirements for running notebooks under notebooks/.
+# This does NOT include aiperf itself — the notebooks shell out to the
+# scenario bash scripts, which invoke the `aiperf` CLI from whatever
+# environment/image it's installed in (see each notebook's Requirements
+# section for how to point at it).
+jupyter>=1.0
+pandas>=2.0
+matplotlib>=3.8
