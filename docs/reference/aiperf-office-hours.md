@@ -6,7 +6,7 @@ Sources:
 - Gist: [AIPerf Comprehensive Benchmarking Guide](https://gist.github.com/BenHamm/31c648f7d7331c94c1f3a45859db6677) (AIPerf v0.3.0)
 - You Video transcript [AI Perf Benchmarking](https://www.youtube.com/watch?v=OuQCSOIR-Y8): Dynamo office hours, AIPerf benchmarking walkthrough (same content plus Q&A)
 
-Runnable companions: each use case below has a hands-on notebook under `notebooks/` (`aiperf_uc1_synthetic_profiling.ipynb` … `aiperf_uc5_time_slices.ipynb`).
+Runnable companions: each use case below has a hands-on notebook under `notebooks/` (`aiperf_uc1_synthetic_profiling.ipynb` … `aiperf_uc5_time_slices.ipynb`), plus `aiperf_uc6_gpu_telemetry.ipynb` for the GPU-telemetry capability covered in the Q&A section.
 
 Demo endpoint used throughout the gist: Qwen3-0.6B on vLLM v0.11.0, 8 independent replicas across 8× H200 on Kubernetes — deliberately overprovisioned, and taken down after the session.
 
@@ -87,7 +87,7 @@ Same benchmark rerun at concurrency 10/50/100/200/500, plotting **TPS-per-GPU (c
 ## Other capabilities and Q&A points
 
 - **In-cluster benchmarking**: run AIPerf inside the same K8s cluster (or on the GPU node) to eliminate network round-trip latency and ephemeral-port exhaustion as confounders. Recommended for high-scale or controlled comparisons; this repo's K8s Job delivery already does this.
-- **GPU telemetry**: AIPerf can collect GPU utilization/memory-bandwidth metrics (multi-GPU supported) via a **DCGM exporter endpoint** — documented in the AIPerf repo. Candidate alternative to the sizing suite's backgrounded `dcgmi`/`nvidia-smi` polling loop.
+- **GPU telemetry**: AIPerf can collect GPU utilization/memory-bandwidth metrics (multi-GPU supported) via a **DCGM exporter endpoint** — documented in the AIPerf repo. Candidate alternative to the sizing suite's backgrounded `dcgmi`/`nvidia-smi` polling loop. Demonstrated hands-on in `notebooks/aiperf_uc6_gpu_telemetry.ipynb` (`--gpu-telemetry` with dcgm-exporter or local `pynvml`).
 - **Request cancellation testing**: `--request-cancellation-rate 20 --request-cancellation-delay 0.5` cancels a percentage of requests after a delay, to test resource cleanup and graceful degradation under user abandonment.
 - **Roadmap (per the session)**: server-side metrics (queue depth, engine telemetry — exactly what `docs/scenarios/sizing.md` lists as documented-but-not-captured), Kubernetes-native distributed load generation (multiple load-tester pods), automatic plot generation, synthetic loadgen for KV-cache-efficiency testing. Nsight kernel-tracing integration in progress, no date.
 
@@ -101,7 +101,7 @@ Same benchmark rerun at concurrency 10/50/100/200/500, plotting **TPS-per-GPU (c
 | In-cluster load generation | Adopted (K8s Jobs) |
 | Time-slice analysis (`--slice-duration`) | Not used yet — natural fit for sustained/soak |
 | Real-trace replay with timestamps (`--fixed-schedule`) | Not used — our `mooncake_trace` usage is format-only, fixed-order replay |
-| DCGM-exporter GPU telemetry via AIPerf | Not used — sizing polls `dcgmi`/`nvidia-smi` instead |
+| DCGM-exporter GPU telemetry via AIPerf | Demonstrated in `notebooks/aiperf_uc6_gpu_telemetry.ipynb`; suites still poll `dcgmi`/`nvidia-smi` (sizing) |
 | Request cancellation testing | Not used |
 
 ## Assessment — gist/transcript vs. this repo
