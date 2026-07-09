@@ -12,6 +12,10 @@ driver load), so run energy is max - min of the counter — never its avg. The
 cross-check is avg power x Benchmark Duration; a large gap between the two
 means coarse exporter sampling.
 
+If the artifact dir holds several runs (AIPerf writes one subdirectory per
+run), the newest profile_export_aiperf.csv wins, and the telemetry file is
+taken from that same run's directory.
+
 Standard library only — runs anywhere the artifacts are (jumphost, CI, laptop).
 
 Usage:
@@ -26,14 +30,29 @@ from pathlib import Path
 
 
 def fnum(value):
+    """Float from an export cell; tolerates thousands separators and blanks."""
+    if value is None:
+        return None
     try:
-        return float(value)
-    except (TypeError, ValueError):
+        return float(str(value).replace(",", "").strip())
+    except ValueError:
         return None
 
 
+def norm(name):
+    """Normalize a metric name for matching: lowercase, underscores as spaces."""
+    return str(name or "").lower().replace("_", " ")
+
+
+def read_text(path):
+    # AIPerf writes UTF-8 (metric names include °C); utf-8-sig also eats a BOM.
+    return path.read_text(encoding="utf-8-sig", errors="replace")
+
+
 def parse_csv(text):
-    return list(csv.DictReader(text.splitlines()))
+    rows = list(csv.DictReader(text.splitlines()))
+    # Defend against stray whitespace in header names.
+    return [{(k or "").strip(): v for k, v in row.items()} for row in rows]
 
 
 def find_key(obj, key):
@@ -41,37 +60,50 @@ def find_key(obj, key):
     if isinstance(obj, dict):
         if key in obj:
             return obj[key]
-        obj = obj.values()
-    if isinstance(obj, (list, tuple)) or hasattr(obj, "__iter__"):
+        obj = list(obj.values())
+    if isinstance(obj, (list, tuple)):
         for item in obj:
-            found = find_key(item, key) if isinstance(item, (dict, list)) else None
-            if found is not None:
-                return found
+            if isinstance(item, (dict, list, tuple)):
+                found = find_key(item, key)
+                if found is not None:
+                    return found
     return None
+
+
+def newest(paths):
+    return max(paths, key=lambda p: p.stat().st_mtime, default=None)
 
 
 def load_exports(artifact_dir):
     """Return (telemetry_rows, totals_rows, concurrency) from the raw exports."""
-    summary_path = next(artifact_dir.rglob("profile_export_aiperf.csv"), None)
+    summary_path = newest(artifact_dir.rglob("profile_export_aiperf.csv"))
     if summary_path is None:
         sys.exit(f"error: no profile_export_aiperf.csv under {artifact_dir} — not an AIPerf artifact dir?")
-    sections = [s for s in summary_path.read_text().strip().split("\n\n") if s.strip()]
+    print(f"Summary export         : {summary_path}")
+    sections = [s for s in read_text(summary_path).strip().split("\n\n") if s.strip()]
     totals = parse_csv(sections[1]) if len(sections) >= 2 else []
 
-    telemetry_path = next(artifact_dir.rglob("gpu_telemetry_export.csv"), None)
+    # Prefer the telemetry file sitting next to the chosen summary (same run);
+    # fall back to the newest one anywhere, then to section 3 of the summary.
+    telemetry_path = summary_path.parent / "gpu_telemetry_export.csv"
+    if not telemetry_path.exists():
+        telemetry_path = newest(artifact_dir.rglob("gpu_telemetry_export.csv"))
     if telemetry_path is not None:
-        telemetry = parse_csv(telemetry_path.read_text())
+        print(f"Telemetry export       : {telemetry_path}")
+        telemetry = parse_csv(read_text(telemetry_path))
     elif len(sections) >= 3:
-        # Fallback: telemetry is also section 3 of the multi-section summary CSV.
+        print(f"Telemetry export       : section 3 of {summary_path.name}")
         telemetry = parse_csv(sections[2])
     else:
         sys.exit(f"error: no GPU telemetry in {summary_path} — was the run collected with --gpu-telemetry?")
 
     concurrency = "?"
-    json_path = next(artifact_dir.rglob("profile_export_aiperf.json"), None)
+    json_path = summary_path.parent / "profile_export_aiperf.json"
+    if not json_path.exists():
+        json_path = newest(artifact_dir.rglob("profile_export_aiperf.json"))
     if json_path is not None:
         try:
-            found = find_key(json.loads(json_path.read_text()), "concurrency")
+            found = find_key(json.loads(read_text(json_path)), "concurrency")
             if found is not None:
                 concurrency = found
         except (json.JSONDecodeError, OSError):
@@ -81,13 +113,13 @@ def load_exports(artifact_dir):
 
 def total_row(totals, name_contains):
     for row in totals:
-        if name_contains in row.get("Metric", "").lower():
+        if name_contains in norm(row.get("Metric")):
             return fnum(row.get("Value"))
     return None
 
 
 def metric_rows(telemetry, name_contains):
-    return [r for r in telemetry if name_contains in r.get("Metric", "").lower()]
+    return [r for r in telemetry if name_contains in norm(r.get("Metric"))]
 
 
 def attributed(rows, gpu_indices):
@@ -122,6 +154,8 @@ def main():
                         help="optional managed-API $/M output tokens, as a sanity anchor")
     args = parser.parse_args()
 
+    if not args.artifact_dir.is_dir():
+        sys.exit(f"error: {args.artifact_dir} is not a directory")
     telemetry, totals, concurrency = load_exports(args.artifact_dir)
 
     tps = total_row(totals, "output token throughput")        # tokens/sec, system-wide
@@ -131,7 +165,17 @@ def main():
     energy = attributed(metric_rows(telemetry, "energy consumption"), args.gpus)
 
     if tps is None or not power:
-        sys.exit("error: throughput or power rows missing — cannot build a FinOps estimate for this run.")
+        print("error: throughput or power rows missing — cannot build a FinOps estimate for this run.",
+              file=sys.stderr)
+        print(f"  output token throughput found : {'yes' if tps is not None else 'NO'}", file=sys.stderr)
+        print(f"  GPU power rows found          : {len(power)}"
+              + (f" (of {len(metric_rows(telemetry, 'power usage'))} before --gpus filter)"
+                 if args.gpus else ""), file=sys.stderr)
+        print(f"  run-totals metrics available  : {[r.get('Metric') for r in totals] or '(none)'}",
+              file=sys.stderr)
+        print(f"  telemetry metrics available   : {sorted({str(r.get('Metric')) for r in telemetry}) or '(none)'}",
+              file=sys.stderr)
+        sys.exit(1)
 
     n_gpus = len(power)
     gpu_label = (", ".join(str(r["GPU_Index"]) for r in power) if all("GPU_Index" in r for r in power)
@@ -150,7 +194,6 @@ def main():
 
     total_out_tok = tps * duration_s if duration_s else None
 
-    print(f"Artifact dir           : {args.artifact_dir}")
     print(f"Attributed GPUs        : {gpu_label}")
     print("\n-- Efficiency ratios (price-independent) --")
     print(f"Tokens per GPU-hour    : {tokens_per_gpu_hour:,.0f}")
