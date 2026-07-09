@@ -7,3 +7,11 @@
 jupyter>=1.0
 pandas>=2.0
 matplotlib>=3.8
+
+# Needed by aiperf's tokenizer loading for some models with custom
+# `trust_remote_code` config/model classes (e.g. embedding models with a
+# custom auto_map, such as nvidia/llama-nemotron-embed-1b-v2) — without it,
+# tokenizer loading can fail with an AttributeError on the fallback base
+# config class instead of a clear "torch not found" error. See the
+# UC7 notebook's tokenizer troubleshooting note.
+torch>=2.0
