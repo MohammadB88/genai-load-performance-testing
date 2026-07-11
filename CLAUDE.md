@@ -25,6 +25,11 @@ Full scenario definitions and metrics tables: see `docs/scenarios/` and `docs/me
 - If you change a scenario's parameters (ISL/OSL, turns, think-time, concurrency), update the corresponding table in `docs/scenarios/` in the same change — the docs and the scripts must stay in sync, since the docs are what gets shown to customers.
 - Think-time ≠ tool-round-trip delay. Chat/human-facing scenarios use `--conversation-turn-delay-mean/stddev` tuned to 2–5s; Agentic uses the same flags tuned to 300–800ms. Don't conflate the two when writing or editing scripts.
 
+## Notebooks & FinOps
+
+- **`notebooks/`** — exploratory/reference Jupyter notebooks, separate from the two committed suites. `model_selection_content_generation.ipynb` runs the Model Selection Content Generation scenario end-to-end interactively. `aiperf_uc1`…`aiperf_uc8` are hands-on companions to `docs/reference/aiperf-office-hours.md` (notes from NVIDIA's Dynamo office-hours AIPerf walkthrough), each demonstrating one AIPerf capability (synthetic profiling, raw exports, mooncake trace replay, goodput, time slices, GPU telemetry, embeddings, rankings). Deps in `notebooks/requirements.txt`. Not wired into either suite's automation — reference/demo material, not source of truth.
+- **`scripts/finops_report.py`** — standalone cost-estimation report from a stored AIPerf artifact directory: price-independent efficiency ratios plus $ figures under cloud/rented and on-prem/owned ownership lenses. Standard-library only. Parses either GPU-telemetry export layout AIPerf may emit (see `docs/reference/aiperf-office-hours.md` uc6 and the module docstring). Standalone equivalent of the notebook's FinOps section (`aiperf_uc6_gpu_telemetry.ipynb` §6) — keep both in sync if the estimation logic changes.
+
 ## Status
 
 - **Model Selection** (`model-selection/`) — implemented for v1 scope (Content Generation only): `run_content_generation.sh`, its prompt dataset, and K8s Job manifests + ConfigMap/PVC generation under `model-selection/k8s/`.
