@@ -2,19 +2,22 @@
 """FinOps estimation from a stored AIPerf artifact directory.
 
 Standalone equivalent of section 6 of notebooks/aiperf_uc6_gpu_telemetry.ipynb:
-reads the raw AIPerf exports (profile_export_aiperf.csv and, when present,
-gpu_telemetry_export.csv) and prints price-independent efficiency ratios first,
-then $ figures under two ownership lenses — cloud/rented (all-in $/GPU-hour,
-electricity included) and on-prem/owned (amortized CapEx + energy x PUE).
+reads the raw AIPerf exports and prints price-independent efficiency ratios
+first, then $ figures under two ownership lenses — cloud/rented (all-in
+$/GPU-hour, electricity included) and on-prem/owned (amortized CapEx +
+energy x PUE).
 
-Energy note: DCGM's Energy Consumption metric is a cumulative counter (since
-driver load), so run energy is max - min of the counter — never its avg. The
-cross-check is avg power x Benchmark Duration; a large gap between the two
-means coarse exporter sampling.
+GPU data is taken from whichever form the AIPerf version emitted:
+- per-GPU telemetry rows (gpu_telemetry_export.csv, or a telemetry section in
+  the summary CSV) — supports --gpus attribution; run energy is max - min of
+  the cumulative Energy Consumption counter (never its avg), cross-checked
+  against avg power x Benchmark Duration;
+- or the aggregated run-totals rows newer AIPerf versions write instead
+  ("Total GPU Power (N GPU) (W)", "Total GPU Energy (N GPU) (J)") — already
+  windowed to the measurement phase; --gpus does not apply.
 
-If the artifact dir holds several runs (AIPerf writes one subdirectory per
-run), the newest profile_export_aiperf.csv wins, and the telemetry file is
-taken from that same run's directory.
+If the artifact dir holds several runs, the newest profile_export_aiperf.csv
+wins, and companion files are taken from that same run's directory.
 
 Standard library only — runs anywhere the artifacts are (jumphost, CI, laptop).
 
@@ -25,6 +28,7 @@ Usage:
 import argparse
 import csv
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -83,19 +87,24 @@ def load_exports(artifact_dir):
     sections = [s for s in read_text(summary_path).strip().split("\n\n") if s.strip()]
     totals = parse_csv(sections[1]) if len(sections) >= 2 else []
 
-    # Prefer the telemetry file sitting next to the chosen summary (same run);
-    # fall back to the newest one anywhere, then to section 3 of the summary.
+    # Per-GPU telemetry: prefer the file next to the chosen summary (same run),
+    # then the newest anywhere, then a telemetry-shaped section of the summary.
+    telemetry = []
     telemetry_path = summary_path.parent / "gpu_telemetry_export.csv"
     if not telemetry_path.exists():
         telemetry_path = newest(artifact_dir.rglob("gpu_telemetry_export.csv"))
     if telemetry_path is not None:
         print(f"Telemetry export       : {telemetry_path}")
         telemetry = parse_csv(read_text(telemetry_path))
-    elif len(sections) >= 3:
-        print(f"Telemetry export       : section 3 of {summary_path.name}")
-        telemetry = parse_csv(sections[2])
     else:
-        sys.exit(f"error: no GPU telemetry in {summary_path} — was the run collected with --gpu-telemetry?")
+        for section in sections[2:]:
+            rows = parse_csv(section)
+            if rows and any(r.get("Metric") for r in rows):
+                print(f"Telemetry export       : extra section of {summary_path.name}")
+                telemetry = rows
+                break
+        else:
+            print("Telemetry export       : none — using GPU aggregates from the run totals, if present")
 
     concurrency = "?"
     json_path = summary_path.parent / "profile_export_aiperf.json"
@@ -115,6 +124,13 @@ def total_row(totals, name_contains):
     for row in totals:
         if name_contains in norm(row.get("Metric")):
             return fnum(row.get("Value"))
+    return None
+
+
+def total_metric_name(totals, name_contains):
+    for row in totals:
+        if name_contains in norm(row.get("Metric")):
+            return row.get("Metric")
     return None
 
 
@@ -149,7 +165,8 @@ def main():
     parser.add_argument("--utilization", type=float, default=1.0,
                         help="fraction of billed hours actually serving — divides capacity cost only")
     parser.add_argument("--gpus", type=int, nargs="+", default=None, metavar="IDX",
-                        help="attributed GPU indices, if the exporter also saw GPUs not serving this model")
+                        help="attributed GPU indices (per-GPU telemetry only), if the exporter "
+                             "also saw GPUs not serving this model")
     parser.add_argument("--api-price-per-mtok", type=float, default=None,
                         help="optional managed-API $/M output tokens, as a sanity anchor")
     args = parser.parse_args()
@@ -161,45 +178,60 @@ def main():
     tps = total_row(totals, "output token throughput")        # tokens/sec, system-wide
     duration_s = total_row(totals, "benchmark duration")      # seconds, warmup excluded
     req_ps = total_row(totals, "request throughput")          # requests/sec
+    total_out_tok = total_row(totals, "total output tokens") or (tps * duration_s if tps and duration_s else None)
+
+    # GPU power/energy: per-GPU telemetry rows if available, else the
+    # aggregated "Total GPU ..." rows newer AIPerf versions put in run totals.
     power = attributed(metric_rows(telemetry, "power usage"), args.gpus)
     energy = attributed(metric_rows(telemetry, "energy consumption"), args.gpus)
+    counter_kwh = None
+    if power:
+        n_gpus = len(power)
+        gpu_label = (", ".join(str(r["GPU_Index"]) for r in power)
+                     if all("GPU_Index" in r for r in power)
+                     else f"{n_gpus} (indices not reported)")
+        avg_power_w = sum(fnum(r.get("avg")) or 0.0 for r in power)
+        energy_source = "counter max-min"
+        # Cumulative counter (MJ): the run's energy is max - min, never avg.
+        deltas = [(fnum(r.get("max")), fnum(r.get("min"))) for r in energy]
+        if deltas and all(mx is not None and mn is not None for mx, mn in deltas):
+            delta_mj = sum(mx - mn for mx, mn in deltas)
+            counter_kwh = delta_mj / 3.6 if delta_mj > 0 else None  # 1 kWh = 3.6 MJ
+    else:
+        avg_power_w = total_row(totals, "total gpu power")
+        energy_j = total_row(totals, "total gpu energy")
+        counter_kwh = energy_j / 3.6e6 if energy_j else None
+        energy_source = "AIPerf-reported"
+        power_name = total_metric_name(totals, "total gpu power") or ""
+        gpu_match = re.search(r"\((\d+)\s*GPU", power_name)
+        n_gpus = int(gpu_match.group(1)) if gpu_match else 1
+        gpu_label = f"{n_gpus} (aggregated in run totals)"
+        if args.gpus is not None:
+            print("note: --gpus ignored — no per-GPU telemetry in these exports, "
+                  "only aggregated run totals")
 
-    if tps is None or not power:
+    if tps is None or avg_power_w is None:
         print("error: throughput or power rows missing — cannot build a FinOps estimate for this run.",
               file=sys.stderr)
         print(f"  output token throughput found : {'yes' if tps is not None else 'NO'}", file=sys.stderr)
-        print(f"  GPU power rows found          : {len(power)}"
-              + (f" (of {len(metric_rows(telemetry, 'power usage'))} before --gpus filter)"
-                 if args.gpus else ""), file=sys.stderr)
-        print(f"  run-totals metrics available  : {[r.get('Metric') for r in totals] or '(none)'}",
+        print(f"  GPU power found               : {'yes' if avg_power_w is not None else 'NO'}",
+              file=sys.stderr)
+        print(f"  run-totals metrics available  : {sorted(str(r.get('Metric')) for r in totals) or '(none)'}",
               file=sys.stderr)
         print(f"  telemetry metrics available   : {sorted({str(r.get('Metric')) for r in telemetry}) or '(none)'}",
               file=sys.stderr)
         sys.exit(1)
 
-    n_gpus = len(power)
-    gpu_label = (", ".join(str(r["GPU_Index"]) for r in power) if all("GPU_Index" in r for r in power)
-                 else f"{n_gpus} (indices not reported)")
     tokens_per_gpu_hour = tps * 3600 / n_gpus
-    avg_power_w = sum(fnum(r.get("avg")) or 0.0 for r in power)
-
-    # Run energy: max - min of the cumulative counter, cross-checked with power x duration.
-    counter_kwh = None
-    deltas = [(fnum(r.get("max")), fnum(r.get("min"))) for r in energy]
-    if deltas and all(mx is not None and mn is not None for mx, mn in deltas):
-        delta_mj = sum(mx - mn for mx, mn in deltas)
-        counter_kwh = delta_mj / 3.6 if delta_mj > 0 else None  # 1 kWh = 3.6 MJ
     derived_kwh = (avg_power_w * duration_s / 3.6e6) if duration_s else None
     run_energy_kwh = counter_kwh if counter_kwh is not None else derived_kwh
-
-    total_out_tok = tps * duration_s if duration_s else None
 
     print(f"Attributed GPUs        : {gpu_label}")
     print("\n-- Efficiency ratios (price-independent) --")
     print(f"Tokens per GPU-hour    : {tokens_per_gpu_hour:,.0f}")
     if counter_kwh is not None and derived_kwh is not None:
-        print(f"Run energy             : {counter_kwh:.4f} kWh (counter max-min)  "
-              f"vs {derived_kwh:.4f} kWh (avg power x duration) — large gaps mean coarse exporter sampling")
+        print(f"Run energy             : {counter_kwh:.4f} kWh ({energy_source})  "
+              f"vs {derived_kwh:.4f} kWh (avg power x duration) — large gaps mean coarse sampling")
     elif run_energy_kwh is not None:
         print(f"Run energy             : {run_energy_kwh:.4f} kWh")
     kwh_per_mtok = None
