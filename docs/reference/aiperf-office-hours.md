@@ -6,7 +6,7 @@ Sources:
 - Gist: [AIPerf Comprehensive Benchmarking Guide](https://gist.github.com/BenHamm/31c648f7d7331c94c1f3a45859db6677) (AIPerf v0.3.0)
 - You Video transcript [AI Perf Benchmarking](https://www.youtube.com/watch?v=OuQCSOIR-Y8): Dynamo office hours, AIPerf benchmarking walkthrough (same content plus Q&A)
 
-Runnable companions: each use case below has a hands-on notebook under `notebooks/` (`aiperf_uc1_synthetic_profiling.ipynb` … `aiperf_uc5_time_slices.ipynb`), plus `aiperf_uc6_gpu_telemetry.ipynb` for the GPU-telemetry capability covered in the Q&A section.
+Runnable companions: each use case below has a hands-on notebook under `notebooks/` (`aiperf_uc1_synthetic_profiling.ipynb` … `aiperf_uc5_time_slices.ipynb`), plus further capability notebooks: `aiperf_uc6_gpu_telemetry.ipynb` (Q&A section below), `aiperf_uc7_embeddings.ipynb`, `aiperf_uc8_rankings.ipynb`, and `aiperf_uc9_custom_prompts.ipynb` (the [custom prompt benchmarking tutorial](https://docs.nvidia.com/aiperf/tutorials/datasets-inputs/custom-prompt-benchmarking) — the deterministic-replay pattern this repo's suites are built on).
 
 Demo endpoint used throughout the gist: Qwen3-0.6B on vLLM v0.11.0, 8 independent replicas across 8× H200 on Kubernetes — deliberately overprovisioned, and taken down after the session.
 
