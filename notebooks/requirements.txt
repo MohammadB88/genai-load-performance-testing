@@ -15,3 +15,9 @@ matplotlib>=3.8
 # config class instead of a clear "torch not found" error. See the
 # UC7 notebook's tokenizer troubleshooting note.
 torch>=2.0
+
+# Model-quality evaluation notebook (model_eval_deepeval.ipynb):
+# deepeval provides the LLM-as-judge metrics; openai is the client used to
+# query the model under test (any OpenAI-compatible endpoint).
+deepeval>=1.0
+openai>=1.0
