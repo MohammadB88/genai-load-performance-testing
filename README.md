@@ -38,6 +38,17 @@ To ensure absolute reproducibility, this project uses a "script-as-config" appro
 - Access to an OpenAI-compatible LLM endpoint.
 
 ### Running Scenarios
+
+Tests can be launched from a Kubernetes Job (primary delivery), interactively from the
+notebooks, or from a jumphost (planned). All paths run the same per-scenario scripts —
+see [docs/execution-flows.md](docs/execution-flows.md) for the detailed flow of each path.
+
+```mermaid
+%% TODO: high-level overview diagram (detailed per-path diagrams in docs/execution-flows.md)
+flowchart LR
+    placeholder[Overview diagram goes here]
+```
+
 To execute a performance test, run the corresponding bash script for the desired scenario:
 ```bash
 ./model-selection/scenario_name.sh
@@ -52,5 +63,6 @@ The suite produces raw AIPerf exports. These files contain the detailed telemetr
 
 For detailed information on how scenarios are constructed and how to interpret the results, refer to the following guides:
 
+- **Execution Flows**: [docs/execution-flows.md](docs/execution-flows.md) - How a test runs from each entry path (Kubernetes Job, notebooks, jumphost).
 - **Scenario Definitions**: [docs/scenarios/](docs/scenarios/) - Detailed workload profiles, including input/output sequence lengths (ISL/OSL), turns, and think-time.
 - **Metrics Guide**: [docs/metrics/](docs/metrics/) - Definitions of TTFT, ITL, Goodput, and other key performance indicators.
