@@ -10,9 +10,34 @@ End-to-end flow shared by all entry paths: entry point → per-scenario script �
 target endpoint → raw export → committed to Git.
 
 ```mermaid
-%% TODO: high-level overview diagram (also embedded in the root README)
 flowchart LR
-    placeholder[Overview diagram goes here]
+    subgraph ENTRY["Entry Paths"]
+        NOTEBOOK["Jupyter Notebook<br/>interactive / reference"]
+        K8SJOB["Kubernetes Job<br/>primary delivery"]
+        JUMP["Jumphost<br/>planned - not built yet"]
+    end
+
+    SCRIPT["Per-Scenario Bash Script<br/>script-as-config<br/>single source of truth"]
+
+    AIPERF["AIPerf<br/>aiperf profile"]
+
+    LLM["OpenAI-Compatible Endpoint<br/>NIM, vLLM, TGI, SGLang, ..."]
+
+    EXPORT["Raw AIPerf Export<br/>no processed report layer"]
+
+    GIT["Git Repository<br/>scripts + run outputs committed,<br/>AIPerf version pinned"]
+
+    NOTEBOOK --> SCRIPT
+    K8SJOB --> SCRIPT
+    JUMP -.-> SCRIPT
+
+    SCRIPT --> AIPERF
+
+    AIPERF -->|"Concurrent inference requests"| LLM
+    LLM -->|"Streaming or non-streaming responses"| AIPERF
+
+    AIPERF --> EXPORT
+    EXPORT --> GIT
 ```
 
 ## Notebooks (interactive/reference)
