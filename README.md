@@ -93,3 +93,11 @@ For detailed information on how scenarios are constructed and how to interpret t
 - **Execution Flows**: [docs/execution-flows.md](docs/execution-flows.md) - How a test runs from each entry path (Kubernetes Job, notebooks, jumphost).
 - **Scenario Definitions**: [docs/scenarios/](docs/scenarios/) - Detailed workload profiles, including input/output sequence lengths (ISL/OSL), turns, and think-time.
 - **Metrics Guide**: [docs/metrics/](docs/metrics/) - Definitions of TTFT, ITL, Goodput, and other key performance indicators.
+
+## References
+
+The `notebooks/aiperf_uc*` use-case notebooks demonstrate individual AIPerf capabilities directly; the per-scenario bash scripts remain the source of truth for the Model Selection / Sizing suites. Their background sources:
+
+- **AIPerf office-hours gist** — [gist.github.com/BenHamm/31c648f7d7331c94c1f3a45859db6677](https://gist.github.com/BenHamm/31c648f7d7331c94c1f3a45859db6677); distilled notes in [docs/reference/aiperf-office-hours.md](docs/reference/aiperf-office-hours.md). Basis for the synthetic-profiling, raw-export, mooncake-trace, goodput, and time-slice notebooks (UC1–UC5).
+- **AIPerf GPU Telemetry tutorial** — [github.com/ai-dynamo/aiperf .../gpu-telemetry.md](https://github.com/ai-dynamo/aiperf/blob/main/docs/tutorials/gpu-telemetry.md). Basis for the GPU-telemetry notebook (UC6).
+- **NVIDIA AIPerf tutorials** — [Profiling Embedding Models](https://docs.nvidia.com/aiperf/dev/tutorials/model-endpoint-guides/profile-embedding-models-with-ai-perf), [Profiling Ranking Models](https://docs.nvidia.com/aiperf/dev/tutorials/model-endpoint-guides/profile-ranking-models-with-ai-perf), and [Custom Prompt Benchmarking](https://docs.nvidia.com/aiperf/tutorials/datasets-inputs/custom-prompt-benchmarking). Basis for the embeddings, rankings, and custom-prompt notebooks (UC7–UC9).

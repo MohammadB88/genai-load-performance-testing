@@ -6,6 +6,7 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+.claude/
 
 # AIPerf run output (default OUTPUT_DIR for run_*.sh scripts) and HF cache
 # — raw exports we DO want are committed explicitly per scenario, not swept
