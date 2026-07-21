@@ -1,5 +1,7 @@
 # GenAI Load & Performance Testing Suite
 
+![GenAI Load & Performance Testing Suite](docs/images/genai-performance-testing.png)
+
 A reproducible LLM performance testing suite built on [NVIDIA AIPerf](https://github.com/ai-dynamo/aiperf). This tool is designed to help organizations (1) choose the right model for their specific use case and (2) determine the appropriate infrastructure sizing to support their load.
 
 AIPerf is about endpoint benchmarking / workload generation / server metrics.
