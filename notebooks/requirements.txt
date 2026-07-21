@@ -10,7 +10,12 @@ matplotlib>=3.8
 
 # UC1's interactive-charts section (an aiperf plot / Kaleido/Chrome-free
 # alternative for sandboxed environments like OpenShift AI workbenches).
+# nbformat is required by Plotly's inline notebook renderers — without it
+# fig.show() can render nothing (a silent blank output cell) instead of the
+# interactive figure. Usually pulled in transitively by jupyter, but pinned
+# here so the interactive charts don't depend on that.
 plotly>=5.0
+nbformat>=4.2
 
 # Needed by aiperf's tokenizer loading for some models with custom
 # `trust_remote_code` config/model classes (e.g. embedding models with a
