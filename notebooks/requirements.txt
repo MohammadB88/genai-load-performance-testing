@@ -8,6 +8,10 @@ jupyter>=1.0
 pandas>=2.0
 matplotlib>=3.8
 
+# UC1's interactive-charts section (an aiperf plot / Kaleido/Chrome-free
+# alternative for sandboxed environments like OpenShift AI workbenches).
+plotly>=5.0
+
 # Needed by aiperf's tokenizer loading for some models with custom
 # `trust_remote_code` config/model classes (e.g. embedding models with a
 # custom auto_map, such as nvidia/llama-nemotron-embed-1b-v2) — without it,
